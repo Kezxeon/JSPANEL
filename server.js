@@ -1,7 +1,8 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const { randomString, hmacSHA256, aesGcmEncrypt } = require('./utils');
+const crypto = require('crypto');   // <-- ADD THIS
+const { randomString, hmacSHA256, aesGcmEncrypt } = require('./utils');;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
