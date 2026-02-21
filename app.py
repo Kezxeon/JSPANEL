@@ -1,6 +1,6 @@
-# app.py - Updated with proper AES-256-GCM for client compatibility
+# app.py - Updated with Library Management System
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import json
 import os
@@ -15,11 +15,15 @@ from datetime import datetime, timedelta
 from functools import wraps
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import struct
+from werkzeug.utils import secure_filename
 
 
 ADMIN_PASSWORD = "changeme"
 KEYS_FILE = os.path.join(os.path.dirname(__file__), "data", "keys.json")
+LIBRARIES_FILE = os.path.join(os.path.dirname(__file__), "data", "libraries.json")
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "data", "sessions.json")
+LIBRARIES_DIR = os.path.join(os.path.dirname(__file__), "AzxLibraries")
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 AES_KEY_B64 = "ijIe7lzCGmmunuhiZ6I/f97NNBAVlLmhaEsfDZJe8eU="
 GAME_ID = "AzxiePanel"
 SECRET_SALT = "Nh3Dv2WJ9jxfsbEzqWjRlA4KgFY9VQ8H"
@@ -31,6 +35,7 @@ CORS(app)
 AES_KEY = base64.b64decode(AES_KEY_B64)
 
 os.makedirs(os.path.dirname(KEYS_FILE), exist_ok=True)
+os.makedirs(LIBRARIES_DIR, exist_ok=True)
 
 
 def load_keys():
@@ -47,6 +52,22 @@ def load_keys():
 def save_keys(keys):
     with open(KEYS_FILE, "w") as f:
         json.dump(keys, f, indent=2)
+
+
+def load_libraries():
+    if not os.path.exists(LIBRARIES_FILE):
+        return {}
+    try:
+        with open(LIBRARIES_FILE, "r") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except:
+        return {}
+
+
+def save_libraries(libs):
+    with open(LIBRARIES_FILE, "w") as f:
+        json.dump(libs, f, indent=2)
 
 
 def load_sessions():
@@ -75,7 +96,7 @@ def require_admin(f):
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.form.get("token", "")
+        token = request.form.get("token", "") or request.args.get("token", "")
         if not token:
             return jsonify({"success": False, "message": "Unauthorized"})
 
@@ -95,7 +116,11 @@ def require_admin(f):
 
 
 def hmac_sha256(data, key):
-    return hmac.new(key, data.encode("utf-8"), hashlib.sha256).hexdigest()
+    if isinstance(key, str):
+        key = key.encode('utf-8')
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    return hmac.new(key, data, hashlib.sha256).hexdigest()
 
 
 def aes_256_gcm_encrypt(plaintext, key):
@@ -162,6 +187,14 @@ def api_handler():
         return handle_delete_key()
     elif action == "reset_hwid":
         return handle_reset_hwid()
+    elif action == "upload_library":
+        return handle_upload_library()
+    elif action == "list_libraries":
+        return handle_list_libraries()
+    elif action == "delete_library":
+        return handle_delete_library()
+    elif action == "download_library":
+        return handle_download_library()
     elif action == "login":
         return handle_login()
     elif action == "connect":
@@ -335,6 +368,104 @@ def handle_reset_hwid():
     return jsonify({"success": True})
 
 
+@require_admin
+def handle_upload_library():
+    if "library_file" not in request.files:
+        return jsonify({"success": False, "message": "No file uploaded."})
+
+    file = request.files["library_file"]
+    lib_name = request.form.get("lib_name", "").strip()
+    lib_version = request.form.get("lib_version", "").strip()
+    lib_description = request.form.get("lib_description", "").strip()
+
+    if not lib_name:
+        return jsonify({"success": False, "message": "Library name is required."})
+
+    if not file or file.filename == "":
+        return jsonify({"success": False, "message": "No file selected."})
+
+    if not file.filename.endswith(".so"):
+        return jsonify({"success": False, "message": "Only .SO files are allowed."})
+
+    if file.content_length and file.content_length > MAX_FILE_SIZE:
+        return jsonify({"success": False, "message": "File exceeds 20 MB limit."})
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(LIBRARIES_DIR, filename)
+
+    try:
+        file.save(filepath)
+        file_size = os.path.getsize(filepath)
+
+        if file_size > MAX_FILE_SIZE:
+            os.remove(filepath)
+            return jsonify({"success": False, "message": "File exceeds 20 MB limit."})
+
+        libs = load_libraries()
+        libs[filename] = {
+            "filename": filename,
+            "size": file_size,
+            "version": lib_version if lib_version else None,
+            "description": lib_description if lib_description else None,
+            "uploaded": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        save_libraries(libs)
+
+        return jsonify({"success": True, "message": "Library uploaded successfully."})
+    except Exception as e:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        return jsonify({"success": False, "message": f"Upload failed: {str(e)}"})
+
+
+@require_admin
+def handle_list_libraries():
+    search = request.form.get("search", "").lower()
+    libs = load_libraries()
+    rows = []
+
+    for lib in libs.values():
+        if search and search not in lib["filename"].lower():
+            continue
+        rows.append(lib)
+
+    rows.sort(key=lambda x: x.get("uploaded", ""), reverse=True)
+    return jsonify({"success": True, "libraries": rows[:200]})
+
+
+@require_admin
+def handle_delete_library():
+    filename = secure_filename(request.form.get("filename", ""))
+    filepath = os.path.join(LIBRARIES_DIR, filename)
+
+    if os.path.exists(filepath) and os.path.isfile(filepath):
+        try:
+            os.remove(filepath)
+        except Exception as e:
+            return jsonify({"success": False, "message": f"Failed to delete file: {str(e)}"})
+
+    libs = load_libraries()
+    if filename in libs:
+        del libs[filename]
+        save_libraries(libs)
+
+    return jsonify({"success": True})
+
+
+@require_admin
+def handle_download_library():
+    filename = secure_filename(request.args.get("filename", ""))
+    filepath = os.path.join(LIBRARIES_DIR, filename)
+
+    if not os.path.exists(filepath) or not os.path.isfile(filepath):
+        return jsonify({"success": False, "message": "File not found."}), 404
+
+    try:
+        return send_file(filepath, as_attachment=True, download_name=filename)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Download failed: {str(e)}"}), 500
+
+
 def handle_login():
 
     user_key = request.form.get("user_key", "")
@@ -453,11 +584,5 @@ def serve_static(path):
 
 
 if __name__ == "__main__":
-    # print("=" * 50)
-    # print("CFL License System - Python Backend")
-    # print("=" * 50)
-    # print(f"Data directory: {os.path.dirname(KEYS_FILE)}")
-    # print(f"AES Key: {AES_KEY_B64}")
     print(f"Server starting..")
-    # print("=" * 50)
     app.run(debug=False, host="0.0.0.0", port=5000)

@@ -1,6 +1,7 @@
-// admin.js — CFL Admin Panel
- 
+// admin.js — CFL Admin Panel with Library Management
+
 const API = './api.php';
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
 // ─── Custom Confirmation Dialog ────────────────────────────────────────────
 function showConfirmDialog(message, title = "Confirm Action") {
@@ -106,6 +107,42 @@ function showConfirmDialog(message, title = "Confirm Action") {
 })();
 
 function token() { return sessionStorage.getItem('adminToken') || ''; }
+
+// ─── Page Navigation ──────────────────────────────────────────────────────────
+function initNavigation() {
+  const navItems = document.querySelectorAll('.nav-item');
+  const pages = {
+    'dashboard': document.getElementById('dashboardPage'),
+    'libraries': document.getElementById('librariesPage')
+  };
+
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const pageName = item.getAttribute('data-page');
+      
+      // Hide all pages
+      Object.values(pages).forEach(page => {
+        if (page) page.classList.add('hidden');
+      });
+      
+      // Show selected page
+      if (pages[pageName]) {
+        pages[pageName].classList.remove('hidden');
+      }
+      
+      // Update nav active state
+      navItems.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+
+      // Load page-specific data
+      if (pageName === 'libraries') {
+        loadLibsList();
+      } else if (pageName === 'dashboard') {
+        loadStats();
+      }
+    });
+  });
+}
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -243,7 +280,6 @@ async function loadKeysList() {
       </tr>
     `).join('');
     
-    // Attach checkbox event listeners
     attachCheckboxListeners();
   } catch(e) {
     keysBody.innerHTML = `<tr><td colspan="7" class="empty-msg">Error: ${e.message}</td></tr>`;
@@ -314,10 +350,251 @@ async function resetHWID(key) {
   loadKeysList();
 }
 
+// ─── Library Management ────────────────────────────────────────────────────────
+
+const fileUploadArea = document.getElementById('fileUploadArea');
+const libFileInput = document.getElementById('libFileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const uploadResult = document.getElementById('uploadResult');
+const uploadProgress = document.getElementById('uploadProgress');
+let selectedFile = null;
+
+// Drag and drop
+fileUploadArea.addEventListener('click', () => libFileInput.click());
+fileUploadArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  fileUploadArea.style.borderColor = 'var(--accent)';
+  fileUploadArea.style.background = 'rgba(0, 245, 255, 0.05)';
+});
+fileUploadArea.addEventListener('dragleave', () => {
+  fileUploadArea.style.borderColor = 'var(--border)';
+  fileUploadArea.style.background = 'transparent';
+});
+fileUploadArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  fileUploadArea.style.borderColor = 'var(--border)';
+  fileUploadArea.style.background = 'transparent';
+  if (e.dataTransfer.files.length > 0) {
+    handleFileSelect(e.dataTransfer.files[0]);
+  }
+});
+
+libFileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    handleFileSelect(e.target.files[0]);
+  }
+});
+
+function handleFileSelect(file) {
+  if (!file.name.endsWith('.so')) {
+    showResult(uploadResult, '✗ Only .SO files are allowed', 'error');
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    showResult(uploadResult, `✗ File exceeds 20 MB limit (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'error');
+    return;
+  }
+  selectedFile = file;
+  document.getElementById('libName').value = file.name;
+  showResult(uploadResult, `✓ File selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+}
+
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) {
+    showResult(uploadResult, 'Please select a .SO file', 'warn');
+    return;
+  }
+
+  const libName = document.getElementById('libName').value.trim();
+  const libVersion = document.getElementById('libVersion').value.trim();
+  const libDescription = document.getElementById('libDescription').value.trim();
+
+  if (!libName) {
+    showResult(uploadResult, 'Library name is required', 'warn');
+    return;
+  }
+
+  hideResult(uploadResult);
+  setLoading(uploadBtn, true);
+  uploadProgress.classList.remove('hidden');
+
+  try {
+    const fd = new FormData();
+    fd.append('action', 'upload_library');
+    fd.append('token', token());
+    fd.append('library_file', selectedFile);
+    fd.append('lib_name', libName);
+    fd.append('lib_version', libVersion);
+    fd.append('lib_description', libDescription);
+
+    const xhr = new XMLHttpRequest();
+    
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percentComplete = (e.loaded / e.total) * 100;
+        document.getElementById('progressFill').style.width = percentComplete + '%';
+        document.getElementById('progressText').textContent = `Uploading... ${Math.round(percentComplete)}%`;
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      uploadProgress.classList.add('hidden');
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        if (data.success) {
+          showResult(uploadResult, `✓ Library uploaded successfully`, 'success');
+          selectedFile = null;
+          libFileInput.value = '';
+          document.getElementById('libName').value = '';
+          document.getElementById('libVersion').value = '';
+          document.getElementById('libDescription').value = '';
+          setTimeout(() => loadLibsList(), 1000);
+        } else {
+          showResult(uploadResult, '✗ ' + (data.message || 'Upload failed'), 'error');
+        }
+      } else {
+        showResult(uploadResult, '✗ Server error: ' + xhr.status, 'error');
+      }
+      setLoading(uploadBtn, false);
+    });
+
+    xhr.addEventListener('error', () => {
+      uploadProgress.classList.add('hidden');
+      showResult(uploadResult, '✗ Network error during upload', 'error');
+      setLoading(uploadBtn, false);
+    });
+
+    xhr.open('POST', API);
+    xhr.send(fd);
+  } catch(e) {
+    uploadProgress.classList.add('hidden');
+    showResult(uploadResult, 'Error: ' + e.message, 'error');
+    setLoading(uploadBtn, false);
+  }
+});
+
+// Library List
+document.getElementById('loadLibsBtn').addEventListener('click', loadLibsList);
+document.getElementById('searchLib').addEventListener('input', debounce(loadLibsList, 350));
+
+async function loadLibsList() {
+  const libsBody = document.getElementById('libsBody');
+  libsBody.innerHTML = '<tr><td colspan="7" class="empty-msg">Loading...</td></tr>';
+  
+  try {
+    const data = await apiFetch('list_libraries', {
+      search: document.getElementById('searchLib').value,
+    });
+
+    if (!data.success) {
+      libsBody.innerHTML = `<tr><td colspan="7" class="empty-msg">${data.message}</td></tr>`;
+      return;
+    }
+    if (!data.libraries?.length) {
+      libsBody.innerHTML = '<tr><td colspan="7" class="empty-msg">No libraries found.</td></tr>';
+      return;
+    }
+
+    libsBody.innerHTML = data.libraries.map(lib => `
+      <tr class="lib-row" data-file="${lib.filename}">
+        <td><input type="checkbox" class="lib-checkbox" value="${lib.filename}" /></td>
+        <td style="font-family:var(--font-mono);color:var(--accent)">${lib.filename}</td>
+        <td>${formatFileSize(lib.size)}</td>
+        <td>${lib.version || '—'}</td>
+        <td>${lib.uploaded || '—'}</td>
+        <td>${lib.description || '—'}</td>
+        <td>
+          <button class="action-btn" onclick="downloadLibrary('${lib.filename}')">DOWNLOAD</button>
+          <button class="action-btn" onclick="deleteLibrary('${lib.filename}')">DELETE</button>
+        </td>
+      </tr>
+    `).join('');
+
+    attachLibCheckboxListeners();
+  } catch(e) {
+    libsBody.innerHTML = `<tr><td colspan="7" class="empty-msg">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function attachLibCheckboxListeners() {
+  const selectAllCheckbox = document.getElementById('selectAllLibs');
+  const libCheckboxes = document.querySelectorAll('.lib-checkbox');
+  const deleteSelectedBtn = document.getElementById('deleteSelectedLibBtn');
+  
+  selectAllCheckbox.addEventListener('change', () => {
+    libCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    updateDeleteLibButtonVisibility();
+  });
+  
+  libCheckboxes.forEach(cb => {
+    cb.addEventListener('change', () => {
+      selectAllCheckbox.checked = Array.from(libCheckboxes).every(checkbox => checkbox.checked);
+      updateDeleteLibButtonVisibility();
+    });
+  });
+  
+  deleteSelectedBtn.addEventListener('click', deleteBatchLibraries);
+}
+
+function updateDeleteLibButtonVisibility() {
+  const libCheckboxes = document.querySelectorAll('.lib-checkbox:checked');
+  const deleteSelectedBtn = document.getElementById('deleteSelectedLibBtn');
+  deleteSelectedBtn.style.display = libCheckboxes.length > 0 ? 'block' : 'none';
+}
+
+async function deleteBatchLibraries() {
+  const selectedCheckboxes = document.querySelectorAll('.lib-checkbox:checked');
+  if (selectedCheckboxes.length === 0) return;
+  
+  const files = Array.from(selectedCheckboxes).map(cb => cb.value);
+  const plural = files.length === 1 ? 'library' : 'libraries';
+  const confirmed = await showConfirmDialog(`Permanently delete ${files.length} ${plural}?\n\nThis action cannot be undone.`, 'Confirm Deletion');
+  if (!confirmed) return;
+  
+  const deleteBtn = document.getElementById('deleteSelectedLibBtn');
+  setLoading(deleteBtn, true);
+  
+  try {
+    for (const file of files) {
+      await apiFetch('delete_library', { filename: file });
+    }
+    loadLibsList();
+  } catch(e) {
+    alert('Error deleting libraries: ' + e.message);
+  } finally {
+    setLoading(deleteBtn, false);
+  }
+}
+
+async function deleteLibrary(filename) {
+  const confirmed = await showConfirmDialog(`Permanently delete this library?\n\n${filename}\n\nThis action cannot be undone.`, 'Confirm Deletion');
+  if (!confirmed) return;
+  await apiFetch('delete_library', { filename });
+  loadLibsList();
+}
+
+async function downloadLibrary(filename) {
+  const link = document.createElement('a');
+  link.href = `./api.php?action=download_library&filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token())}`;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+initNavigation();
 loadStats();
