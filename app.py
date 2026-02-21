@@ -573,31 +573,6 @@ def handle_connect():
     return send_enc_payload(response_data, AES_KEY)
 
 
-@app.route("/")
-def serve_index():
-    return send_from_directory(".", "index.html")
-
-
-@app.route("/<path:path>")
-def serve_static(path):
-    return send_from_directory(".", path)
-
-@app.route('/')
-def serve_index():
-    return send_from_directory(".", "index.html")
-
-@app.route('/admin')
-def serve_admin():
-    return send_from_directory(".", "admin.html")
-
-# Catch-all for static files (CSS, JS, images)
-@app.route('/<path:path>')
-def serve_static(path):
-    # Only serve actual files with extensions
-    if '.' in path:
-        return send_from_directory(".", path)
-    # Redirect any other clean URLs to index (SPA behavior)
-    return send_from_directory(".", "index.html")
 @app.route('/')
 def home():
     return send_from_directory('.', 'index.html')
