@@ -1,4 +1,4 @@
-# app.py - CFL License System (Python/Flask version)
+# app.py - Updated with proper AES-256-GCM for client compatibility
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -13,6 +13,10 @@ import random
 import string
 from datetime import datetime, timedelta
 from functools import wraps
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+import struct
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 ADMIN_PASSWORD = 'changeme'  # Change this!
@@ -26,6 +30,9 @@ SUCCESS_STATUS = 945734
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
+
+# Decode AES key once at startup
+AES_KEY = base64.b64decode(AES_KEY_B64)  # This matches your C++ Base64::Decode
 
 # Ensure data directory exists
 os.makedirs(os.path.dirname(KEYS_FILE), exist_ok=True)
@@ -97,30 +104,65 @@ def require_admin(f):
 
 # ─── ENCRYPTION HELPERS ───────────────────────────────────────────────────────
 
-def send_enc_payload(json_str, key):
-    """Send encrypted payload"""
-    key_bytes = base64.b64decode(AES_KEY_B64)
-    iv = os.urandom(12)
+def hmac_sha256(data, key):
+    """HMAC-SHA256 to match your C++ implementation"""
+    return hmac.new(key, data.encode('utf-8'), hashlib.sha256).hexdigest()
+
+def aes_256_gcm_encrypt(plaintext, key):
+    """AES-256-GCM encryption to match your C++ client"""
+    iv = os.urandom(12)  # 12 bytes IV
+    aesgcm = AESGCM(key)
     
-    # For AES-256-GCM, we need to use cryptography library or pycryptodome
-    # This is a simplified version - in production use proper crypto library
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    # Encrypt with no additional authenticated data
+    ciphertext = aesgcm.encrypt(iv, plaintext.encode('utf-8'), None)
     
-    aesgcm = AESGCM(key_bytes)
-    ct = aesgcm.encrypt(iv, json_str.encode('utf-8'), None)
+    # In GCM, the tag is appended to the ciphertext
+    # Split into ciphertext and tag (last 16 bytes)
+    tag = ciphertext[-16:]
+    ct = ciphertext[:-16]
     
-    payload = base64.b64encode(iv + ct).decode('utf-8')
-    hmac_val = hmac.new(key_bytes, payload.encode('utf-8'), hashlib.sha256).hexdigest()
+    return iv, ct, tag
+
+def aes_256_gcm_decrypt(ciphertext, iv, tag, key):
+    """AES-256-GCM decryption to match your C++ implementation"""
+    aesgcm = AESGCM(key)
+    
+    # Combine ciphertext and tag for decryption
+    combined = ciphertext + tag
+    
+    try:
+        plaintext = aesgcm.decrypt(iv, combined, None)
+        return plaintext.decode('utf-8')
+    except Exception as e:
+        raise Exception(f"Decryption failed: {e}")
+
+def send_enc_payload(data_dict, key):
+    """Send encrypted payload matching your C++ client expectations"""
+    # Convert data to JSON string
+    json_str = json.dumps(data_dict)
+    
+    # Encrypt with AES-256-GCM
+    iv, ciphertext, tag = aes_256_gcm_encrypt(json_str, key)
+    
+    # Combine iv + tag + ciphertext (matches your C++ format)
+    # Your C++ code does: iv (12) + tag (16) + ciphertext
+    combined = iv + tag + ciphertext
+    
+    # Base64 encode the combined data
+    payload_b64 = base64.b64encode(combined).decode('utf-8')
+    
+    # Calculate HMAC of the payload
+    payload_hmac = hmac_sha256(payload_b64, key)
     
     return jsonify({
         'enc': True,
-        'payload': payload,
-        'hmac': hmac_val
+        'payload': payload_b64,
+        'hmac': payload_hmac
     })
 
 def send_enc_err(reason, key):
     """Send encrypted error response"""
-    return send_enc_payload(json.dumps({'status': 0, 'reason': reason}), key)
+    return send_enc_payload({'status': 0, 'reason': reason}, key)
 
 # ─── ROUTES ───────────────────────────────────────────────────────────────────
 
@@ -331,72 +373,93 @@ def handle_login():
     })
 
 def handle_connect():
-    """Connect endpoint for game client"""
-    aes_key = base64.b64decode(AES_KEY_B64)
-    
+    """Connect endpoint for game client - MATCHES YOUR C++ CLIENT"""
+    # Get POST parameters
     game = request.form.get('game', '')
     auth = request.form.get('auth', '')
     user_key = request.form.get('user_key', '')
     serial = request.form.get('serial', '')
-    t = int(request.form.get('t', 0))
+    t = request.form.get('t', '0')
     sig = request.form.get('sig', '')
     
-    # Verify game ID and timestamp
-    if game != GAME_ID or abs(time.time() - t) > 60:
-        return send_enc_err('Rejected', aes_key)
+    try:
+        t_int = int(t)
+    except:
+        return send_enc_err('Invalid timestamp', AES_KEY)
     
-    # Verify signature
+    # Log for debugging
+    app.logger.info(f"Connect request: game={game}, user_key={user_key}")
+    
+    # Verify game ID
+    if game != GAME_ID:
+        return send_enc_err('Invalid game ID', AES_KEY)
+    
+    # Verify timestamp (within 60 seconds)
+    if abs(time.time() - t_int) > 60:
+        return send_enc_err('Timestamp expired', AES_KEY)
+    
+    # Reconstruct message and verify signature (matches your C++ client)
     message = f"game={game}&auth={auth}&user_key={user_key}&serial={serial}&t={t}"
-    expected_sig = hmac.new(aes_key, message.encode('utf-8'), hashlib.sha256).hexdigest()
+    expected_sig = hmac_sha256(message, AES_KEY)
     
     if not hmac.compare_digest(expected_sig, sig):
-        return send_enc_err('Signature mismatch', aes_key)
+        app.logger.warning(f"Signature mismatch: expected={expected_sig}, got={sig}")
+        return send_enc_err('Signature mismatch', AES_KEY)
     
+    # Load keys and verify
     keys = load_keys()
     
     if user_key not in keys:
-        return send_enc_err('Key not found', aes_key)
+        return send_enc_err('Key not found', AES_KEY)
     
     row = keys[user_key]
     
+    # Check if banned
     if row['status'] == 'banned':
-        return send_enc_err('Banned', aes_key)
+        return send_enc_err('Key is banned', AES_KEY)
     
     # Check expiration
     if row.get('expires'):
-        if datetime.strptime(row['expires'], '%Y-%m-%d %H:%M:%S').timestamp() < time.time():
+        expiry_time = datetime.strptime(row['expires'], '%Y-%m-%d %H:%M:%S').timestamp()
+        if expiry_time < time.time():
             keys[user_key]['status'] = 'expired'
             save_keys(keys)
-            return send_enc_err('Expired', aes_key)
+            return send_enc_err('Key has expired', AES_KEY)
     
     # Check HWID
     if row.get('hwid') and row['hwid'] != serial:
-        return send_enc_err('HWID mismatch', aes_key)
+        return send_enc_err('HWID mismatch', AES_KEY)
     
     # Set HWID if not set
     if not row.get('hwid'):
         keys[user_key]['hwid'] = serial
         keys[user_key]['status'] = 'active'
     
+    # Update last used
     keys[user_key]['last_used'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     save_keys(keys)
     
-    # Generate response
-    checked = hashlib.md5(
-        f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}".encode('utf-8')
-    ).hexdigest()
+    # Calculate checked hash (matches your C++ client)
+    # Your C++: md5(GAME_ID.'-'.$uk.'-'.$serial.'-'.$auth.'-'.$t.'-'.SECRET_SALT)
+    checked_str = f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}"
+    checked = hashlib.md5(checked_str.encode('utf-8')).hexdigest()
     
+    # Calculate token (md5 of user_key)
+    token = hashlib.md5(user_key.encode('utf-8')).hexdigest()
+    
+    # Prepare success response (matches your C++ client expectations)
     response_data = {
         'status': SUCCESS_STATUS,
         'data': {
-            'token': hashlib.md5(user_key.encode('utf-8')).hexdigest(),
+            'token': token,
             'rng': int(time.time()),
             'expiredDate': row['expires'] if row['expires'] else 'Lifetime',
             'checked': checked
         }
     }
     
-    return send_enc_payload(json.dumps(response_data), aes_key)
+    # Send encrypted response
+    return send_enc_payload(response_data, AES_KEY)
 
 # ─── SERVE HTML FILES ─────────────────────────────────────────────────────────
 
@@ -411,7 +474,11 @@ def serve_static(path):
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    print("=" * 50)
     print("CFL License System - Python Backend")
+    print("=" * 50)
     print(f"Data directory: {os.path.dirname(KEYS_FILE)}")
-    print("Starting server on http://localhost:5000")
+    print(f"AES Key: {AES_KEY_B64}")
+    print(f"Server starting on http://localhost:5000")
+    print("=" * 50)
     app.run(debug=True, host='0.0.0.0', port=5000)
