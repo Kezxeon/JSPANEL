@@ -1,5 +1,5 @@
 <?php
-/**
+/** 
  * api.php — CFL License System (NO DATABASE — pure PHP + JSON files)
  */
 
@@ -211,7 +211,7 @@ function handleConnect(): void {
 function sendEncPayload(string $json, string $key): void {
     $iv=''; $tag='';
     $iv = random_bytes(12);
-    $ct = openssl_encrypt($json,'aes-256-gcm',$key,OPENSSL_RAW_DATA,$iv,$tag,'',16);
+    $ct = openssl_encrypt($json,'aes-256-gcm',$key,OPENSSL_RAW_DATA,$iv,$tag);
     $b64 = base64_encode($iv.$tag.$ct);
     out(['enc'=>true,'payload'=>$b64,'hmac'=>hash_hmac('sha256',$b64,$key)]);
 }
