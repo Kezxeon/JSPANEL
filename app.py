@@ -582,6 +582,38 @@ def serve_index():
 def serve_static(path):
     return send_from_directory(".", path)
 
+@app.route('/')
+def serve_index():
+    return send_from_directory(".", "index.html")
+
+@app.route('/admin')
+def serve_admin():
+    return send_from_directory(".", "admin.html")
+
+# Catch-all for static files (CSS, JS, images)
+@app.route('/<path:path>')
+def serve_static(path):
+    # Only serve actual files with extensions
+    if '.' in path:
+        return send_from_directory(".", path)
+    # Redirect any other clean URLs to index (SPA behavior)
+    return send_from_directory(".", "index.html")
+@app.route('/')
+def home():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/dashboard')
+def dashboard():
+    return send_from_directory('.', 'admin.html')
+
+@app.route('/api')
+def api_redirect():
+    return send_from_directory('.', 'api.php')
+
+# Keep static files accessible
+@app.route('/<path:filename>')
+def serve_files(filename):
+    return send_from_directory('.', filename)
 
 if __name__ == "__main__":
     print(f"Server starting..")
