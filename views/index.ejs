@@ -1,1 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Key Generator</title>
+</head>
+<body>
+<h1>Android Key Generator</h1>
+<form method="POST" action="/generate">
+    <label>User Key: <input type="text" name="userKey" required></label>
+    <button type="submit">Generate</button>
+</form>
 
+<% if (generated) { %>
+<h2>Generated Key</h2>
+<p><b>Payload (Base64):</b> <code><%= generated.payloadB64 %></code></p>
+<p><b>HMAC-SHA256:</b> <code><%= generated.sig %></code></p>
+<% } %>
+</body>
+</html>
