@@ -1,8 +1,4 @@
-// app.js — CFL License Portal Frontend Logic
-
 const API_BASE = "./api.php";
-
-// ─── Utility ─────────────────────────────────────────────────────────────────
 
 function showResult(el, msg, type = "error") {
   el.textContent = msg;
@@ -25,8 +21,6 @@ function setLoading(btn, loading) {
   btn.disabled = loading;
 }
 
-// ─── Server ping ──────────────────────────────────────────────────────────────
-
 async function pingServer() {
   const el = document.getElementById("server-status");
   if (!el) return;
@@ -42,8 +36,6 @@ async function pingServer() {
     el.previousElementSibling.classList.add("error");
   }
 }
-
-// ─── Login page ───────────────────────────────────────────────────────────────
 
 const authBtn = document.getElementById("authBtn");
 const keyInput = document.getElementById("licenseKey");
@@ -108,8 +100,6 @@ async function doLogin() {
     setLoading(authBtn, false);
   }
 }
-
-// ─── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
   pingServer();

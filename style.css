@@ -301,12 +301,23 @@ body::after {
   font-family: var(--font-mono);
   font-size: 0.9rem;
   letter-spacing: 0.08em;
-  padding: 14px 0;
+  padding: 14px;
   caret-color: var(--accent);
 }
 
 .input-wrap input::placeholder {
   color: var(--text-muted);
+}
+
+/* Remove number input spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 .paste-btn {
@@ -328,16 +339,23 @@ body::after {
 }
 
 select.styled-select {
-  background: #060e14;
+  background: #060e14
+    url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c8e8f0' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")
+    no-repeat;
+  background-position: calc(100% - 8px) center;
+  background-size: 20px;
   border: 1px solid var(--border);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 0.85rem;
-  padding: 12px 16px;
+  padding: 12px 40px 12px 16px;
   outline: none;
   cursor: pointer;
   width: 100%;
   transition: border-color 0.2s;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 select.styled-select:focus {
   border-color: var(--accent);
@@ -738,6 +756,188 @@ tbody td {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* New Animations */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: var(--glow-sm);
+  }
+  50% {
+    box-shadow: var(--glow);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes tableRowIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes buttonPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Apply animations to elements */
+.panel {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+.logo-hex {
+  animation: float 3s ease-in-out infinite;
+}
+
+.brand {
+  animation: slideInLeft 0.6s ease forwards;
+  animation-delay: 0.1s;
+}
+
+.sub {
+  animation: slideInRight 0.6s ease forwards;
+  animation-delay: 0.2s;
+}
+
+.form-section {
+  animation: fadeIn 0.5s ease forwards;
+  animation-delay: 0.3s;
+}
+
+.input-wrap {
+  transition: all 0.3s ease;
+}
+
+.input-wrap:focus-within {
+  animation: pulseGlow 1.5s ease-in-out infinite;
+}
+
+.auth-btn {
+  transition: all 0.3s ease;
+}
+
+.auth-btn:hover {
+  animation: buttonPulse 0.6s ease-in-out;
+}
+
+.card {
+  animation: fadeIn 0.6s ease forwards;
+}
+
+.card:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.card:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.full-width {
+  animation: slideInLeft 0.6s ease forwards;
+  animation-delay: 0.3s;
+}
+
+.stat-box {
+  animation: fadeIn 0.5s ease forwards;
+  transition: all 0.3s ease;
+}
+
+.stat-box:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 245, 255, 0.2);
+}
+
+tbody tr {
+  animation: tableRowIn 0.3s ease forwards;
+}
+
+tbody tr:nth-child(1) {
+  animation-delay: 0.05s;
+}
+tbody tr:nth-child(2) {
+  animation-delay: 0.1s;
+}
+tbody tr:nth-child(3) {
+  animation-delay: 0.15s;
+}
+tbody tr:nth-child(4) {
+  animation-delay: 0.2s;
+}
+tbody tr:nth-child(5) {
+  animation-delay: 0.25s;
+}
+tbody tr:nth-child(n + 6) {
+  animation-delay: 0.3s;
+}
+
+.ghost-btn {
+  transition: all 0.3s ease;
+}
+
+.ghost-btn:hover {
+  animation: buttonPulse 0.6s ease-in-out;
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.4);
+}
+
+.badge {
+  transition: all 0.3s ease;
+}
+
+.badge:hover {
+  transform: scale(1.1);
 }
 
 /* Responsive */

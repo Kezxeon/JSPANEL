@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CFL — Admin Panel</title>
+    <title>Azxion's — Admin Panel</title>
+    <link rel="icon" href="images/weblogo.png" type="image/png" />
     <link rel="stylesheet" href="style.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap"
@@ -19,7 +20,7 @@
         <div class="admin-header">
           <div class="logo-wrap">
             <div class="logo-text">
-              <span class="brand">CFL ADMIN PANEL</span>
+              <span class="brand">AZZXION ADMIN PANEL</span>
               <span class="sub">KEY MANAGEMENT SYSTEM</span>
             </div>
           </div>
@@ -38,7 +39,6 @@
         </div>
 
         <div class="admin-grid">
-          <!-- Generate Keys -->
           <div class="panel card">
             <div class="panel-border tl"></div>
             <div class="panel-border tr"></div>
@@ -63,11 +63,19 @@
               </div>
 
               <div class="field-label" style="margin-top: 14px">
+                CUSTOM KEY NAME (optional)
+              </div>
+              <div class="input-wrap">
+                <span class="input-icon">⬡</span>
+                <input type="text" id="keyCustomName" />
+              </div>
+
+              <div class="field-label" style="margin-top: 14px">
                 NOTE (optional)
               </div>
               <div class="input-wrap">
                 <span class="input-icon">⬡</span>
-                <input type="text" id="keyNote" placeholder="e.g. buyer123" />
+                <input type="text" id="keyNote" />
               </div>
 
               <button class="auth-btn" id="generateBtn">
@@ -95,7 +103,6 @@
             </div>
           </div>
 
-          <!-- Stats -->
           <div class="panel card">
             <div class="panel-border tl"></div>
             <div class="panel-border tr"></div>
@@ -129,8 +136,6 @@
             </button>
           </div>
         </div>
-
-        <!-- Key Table -->
         <div class="panel card full-width" style="margin-top: 20px">
           <div class="panel-border tl"></div>
           <div class="panel-border tr"></div>
@@ -140,11 +145,7 @@
           <div class="table-controls">
             <div class="input-wrap" style="max-width: 280px">
               <span class="input-icon">⬡</span>
-              <input
-                type="text"
-                id="searchKey"
-                placeholder="Search keys or notes..."
-              />
+              <input type="text" id="searchKey" placeholder="Search.." />
             </div>
             <select
               id="filterStatus"
@@ -164,11 +165,42 @@
             >
               LOAD KEYS
             </button>
+            <button
+              class="ghost-btn"
+              id="deleteSelectedBtn"
+              style="
+                width: auto;
+                padding: 10px 20px;
+                border-color: var(--error);
+                color: var(--error);
+                display: none;
+              "
+            >
+              <img
+                src="images/trash-can-regular-full.svg"
+                alt="Delete"
+                style="
+                  width: 16px;
+                  height: 16px;
+                  margin-right: 6px;
+                  vertical-align: middle;
+                  filter: invert(1) brightness(1.2);
+                "
+              />
+              DELETE SELECTED
+            </button>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
+                  <th style="width: 30px">
+                    <input
+                      type="checkbox"
+                      id="selectAllKeys"
+                      style="cursor: pointer"
+                    />
+                  </th>
                   <th>KEY</th>
                   <th>STATUS</th>
                   <th>EXPIRES</th>

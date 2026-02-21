@@ -1,24 +1,20 @@
 <?php
-/** 
- * api.php — CFL License System (NO DATABASE — pure PHP + JSON files)
- */
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
 define('ADMIN_PASSWORD', 'changeme');
 define('KEYS_FILE',      __DIR__ . '/data/keys.json');
 define('SESSION_FILE',   __DIR__ . '/data/sessions.json');
 define('AES_KEY_B64',    'ijIe7lzCGmmunuhiZ6I/f97NNBAVlLmhaEsfDZJe8eU=');
-define('GAME_ID',        'CFL');
+define('GAME_ID',        'AzxiePanel');
 define('SECRET_SALT',    'Nh3Dv2WJ9jxfsbEzqWjRlA4KgFY9VQ8H');
 define('SUCCESS_STATUS', 945734);
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
-// Make data dir
+
 if (!is_dir(__DIR__ . '/data')) {
     mkdir(__DIR__ . '/data', 0755, true);
 }
@@ -37,8 +33,6 @@ switch ($action) {
     case 'connect':       handleConnect();       break;
     default:              out(['success' => false, 'message' => "Unknown action: '$action'"]);
 }
-
-// ─── FILE HELPERS ─────────────────────────────────────────────────────────────
 
 function loadKeys(): array {
     if (!file_exists(KEYS_FILE)) return [];
@@ -69,17 +63,12 @@ function out(array $data): void {
     exit;
 }
 
-function makeKey(): string {
-    $c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    $k = '';
-    for ($g = 0; $g < 4; $g++) {
-        if ($g) $k .= '-';
-        for ($i = 0; $i < 6; $i++) $k .= $c[random_int(0, strlen($c)-1)];
-    }
-    return $k;
+function makeKey(string $customName = ''): string {
+    $randomPart = bin2hex(random_bytes(5));
+    $prefix = ($customName !== '') ? $customName : 'Azxion';
+    return "{$prefix}-{$randomPart}";
 }
 
-// ─── AUTH CHECK ───────────────────────────────────────────────────────────────
 
 function requireAdmin(): void {
     $token    = post('token');
@@ -90,7 +79,6 @@ function requireAdmin(): void {
     saveSessions($sessions);
 }
 
-// ─── HANDLERS ─────────────────────────────────────────────────────────────────
 
 function handlePing(): void {
     out(['success' => true, 'status' => 'online']);
@@ -112,15 +100,17 @@ function handleAdminLogin(): void {
 
 function handleGenerateKeys(): void {
     requireAdmin();
-    $duration = (int)post('duration');
-    $qty      = min(100, max(1, (int)(post('qty') ?: 1)));
-    $note     = post('note');
+    $duration   = (int)post('duration');
+    $qty        = min(100, max(1, (int)(post('qty') ?: 1)));
+    $note       = post('note');
+    $customName = (string)post('custom_name');
+    
     $expires  = $duration > 0 ? date('Y-m-d H:i:s', strtotime("+{$duration} days")) : null;
 
     $keys    = loadKeys();
     $newKeys = [];
     for ($i = 0; $i < $qty; $i++) {
-        do { $k = makeKey(); } while (isset($keys[$k]));
+        do { $k = makeKey($customName); } while (isset($keys[$k]));
         $keys[$k] = ['key' => $k, 'status' => 'unused', 'hwid' => null, 'expires' => $expires, 'note' => $note ?: null, 'created' => date('Y-m-d H:i:s'), 'last_used' => null];
         $newKeys[] = $k;
     }

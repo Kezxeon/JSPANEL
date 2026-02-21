@@ -1,105 +1,223 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CFL — Access</title>
-<link rel="stylesheet" href="style.css">
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-<div class="scanlines"></div>
-<div class="noise"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Azzxion's Admin Portal</title>
+    <link rel="icon" href="images/weblogo.jpg" type="image/jpeg" />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="scanlines"></div>
+    <div class="noise"></div>
 
-<div class="container">
-  <div class="panel" style="max-width:420px">
-    <div class="panel-border tl"></div>
-    <div class="panel-border tr"></div>
-    <div class="panel-border bl"></div>
-    <div class="panel-border br"></div>
+    <div class="container">
+      <div class="panel" style="max-width: 420px">
+        <div class="panel-border tl"></div>
+        <div class="panel-border tr"></div>
+        <div class="panel-border bl"></div>
+        <div class="panel-border br"></div>
 
-    <div class="header" style="justify-content:center;flex-direction:column;align-items:center;gap:12px;text-align:center">
-      <div class="logo-hex">
-        <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:56px;filter:drop-shadow(0 0 10px #00f5ff88)">
-          <polygon points="30,2 56,16 56,44 30,58 4,44 4,16" stroke="#00f5ff" stroke-width="1.5" fill="none"/>
-          <polygon points="30,10 48,20 48,40 30,50 12,40 12,20" stroke="#00f5ff" stroke-width="0.5" fill="none" opacity="0.4"/>
-          <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#00f5ff" font-family="Share Tech Mono" font-size="16" font-weight="bold">CFL</text>
-        </svg>
-      </div>
-      <div>
-        <div class="brand">WHITE CROWNS</div>
-        <div class="sub" style="text-align:center">ADMIN PORTAL — RESTRICTED</div>
+        <div
+          class="header"
+          style="
+            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+          "
+        >
+          <div class="logo-hex">
+            <svg
+              viewBox="0 0 60 60"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style="
+                width: 56px;
+                height: 56px;
+                filter: drop-shadow(0 0 10px #00f5ff88);
+              "
+            >
+              <polygon
+                points="30,2 56,16 56,44 30,58 4,44 4,16"
+                stroke="#00f5ff"
+                stroke-width="1.5"
+                fill="none"
+              />
+              <polygon
+                points="30,10 48,20 48,40 30,50 12,40 12,20"
+                stroke="#00f5ff"
+                stroke-width="0.5"
+                fill="none"
+                opacity="0.4"
+              />
+              <text
+                x="50%"
+                y="55%"
+                dominant-baseline="middle"
+                text-anchor="middle"
+                fill="#00f5ff"
+                font-family="Share Tech Mono"
+                font-size="16"
+                font-weight="bold"
+              >
+                Azx
+              </text>
+            </svg>
+          </div>
+          <div>
+            <div class="brand">Azzxion Management</div>
+            <div class="sub" style="text-align: center">
+              ADMIN PORTAL — RESTRICTED
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="form-section">
+          <div class="field-label">ADMIN PASSWORD</div>
+          <div class="input-wrap">
+            <button
+              class="input-icon"
+              id="togglePassVisibility"
+              type="button"
+              title="Toggle password visibility"
+              style="
+                border: none;
+                background: none;
+                cursor: pointer;
+                padding: 9;
+                color: var(--accent);
+                font-size: 1rem;
+              "
+            >
+              ⬡
+            </button>
+            <input
+              type="password"
+              id="passInput"
+              placeholder="Enter password..."
+              autocomplete="current-password"
+            />
+            <button
+              class="paste-btn"
+              id="loginPasteBtn"
+              title="Paste from clipboard"
+            >
+              ⎘
+            </button>
+          </div>
+
+          <button class="auth-btn" id="loginBtn">
+            <span class="btn-text">ENTER SYSTEM</span>
+            <span class="btn-loader" style="display: none"
+              ><span></span><span></span><span></span
+            ></span>
+          </button>
+
+          <div id="loginResult" class="result hidden"></div>
+        </div>
+
+        <div style="text-align: center; margin-top: 20px">
+          <span
+            style="
+              font-family: var(--font-mono);
+              font-size: 0.6rem;
+              color: var(--text-muted);
+              letter-spacing: 0.15em;
+            "
+            >UNAUTHORIZED ACCESS IS PROHIBITED</span
+          >
+        </div>
       </div>
     </div>
 
-    <div class="divider"></div>
+    <script>
+      const API = "./api.php";
 
-    <div class="form-section">
-      <div class="field-label">ADMIN PASSWORD</div>
-      <div class="input-wrap">
-        <span class="input-icon">⬡</span>
-        <input type="password" id="passInput" placeholder="Enter password..." autocomplete="current-password">
-      </div>
+      function setLoading(btn, on) {
+        btn.querySelector(".btn-text").style.display = on ? "none" : "";
+        btn.querySelector(".btn-loader").style.display = on ? "flex" : "none";
+        btn.disabled = on;
+      }
+      function showErr(msg, type = "error") {
+        const el = document.getElementById("loginResult");
+        el.textContent = msg;
+        el.className = "result " + type;
+      }
 
-      <button class="auth-btn" id="loginBtn">
-        <span class="btn-text">ENTER SYSTEM</span>
-        <span class="btn-loader" style="display:none"><span></span><span></span><span></span></span>
-      </button>
+      async function doLogin() {
+        const pass = document.getElementById("passInput").value.trim();
+        if (!pass) {
+          showErr("Password required.", "warn");
+          return;
+        }
 
-      <div id="loginResult" class="result hidden"></div>
-    </div>
+        const btn = document.getElementById("loginBtn");
+        setLoading(btn, true);
+        document.getElementById("loginResult").className = "result hidden";
 
-    <div style="text-align:center;margin-top:20px">
-      <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em">UNAUTHORIZED ACCESS IS PROHIBITED</span>
-    </div>
-  </div>
-</div>
+        try {
+          const fd = new FormData();
+          fd.append("action", "admin_login");
+          fd.append("password", pass);
+          const r = await fetch(API, { method: "POST", body: fd });
+          const data = await r.json();
 
-<script>
-const API = './api.php';
+          if (data.success) {
+            sessionStorage.setItem("adminToken", data.token);
+            showErr("✓ ACCESS GRANTED", "success");
+            setTimeout(() => {
+              window.location.href = "admin.html";
+            }, 600);
+          } else {
+            showErr("✗ " + (data.message || "Access denied."), "error");
+            setLoading(btn, false);
+          }
+        } catch (e) {
+          showErr("Network error: " + e.message, "error");
+          setLoading(btn, false);
+        }
+      }
 
-function setLoading(btn, on) {
-  btn.querySelector('.btn-text').style.display = on ? 'none' : '';
-  btn.querySelector('.btn-loader').style.display = on ? 'flex' : 'none';
-  btn.disabled = on;
-}
-function showErr(msg, type='error') {
-  const el = document.getElementById('loginResult');
-  el.textContent = msg;
-  el.className = 'result ' + type;
-}
+      document.getElementById("loginBtn").addEventListener("click", doLogin);
+      document.getElementById("passInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doLogin();
+      });
 
-async function doLogin() {
-  const pass = document.getElementById('passInput').value.trim();
-  if (!pass) { showErr('Password required.', 'warn'); return; }
+      document
+        .getElementById("togglePassVisibility")
+        .addEventListener("click", () => {
+          const input = document.getElementById("passInput");
+          const btn = document.getElementById("togglePassVisibility");
+          if (input.type === "password") {
+            input.type = "text";
+            btn.textContent = "◉";
+          } else {
+            input.type = "password";
+            btn.textContent = "⬡";
+          }
+        });
 
-  const btn = document.getElementById('loginBtn');
-  setLoading(btn, true);
-  document.getElementById('loginResult').className = 'result hidden';
-
-  try {
-    const fd = new FormData();
-    fd.append('action', 'admin_login');
-    fd.append('password', pass);
-    const r = await fetch(API, { method: 'POST', body: fd });
-    const data = await r.json();
-
-    if (data.success) {
-      sessionStorage.setItem('adminToken', data.token);
-      showErr('✓ ACCESS GRANTED', 'success');
-      setTimeout(() => { window.location.href = 'admin.html'; }, 600);
-    } else {
-      showErr('✗ ' + (data.message || 'Access denied.'), 'error');
-      setLoading(btn, false);
-    }
-  } catch(e) {
-    showErr('Network error: ' + e.message, 'error');
-    setLoading(btn, false);
-  }
-}
-
-document.getElementById('loginBtn').addEventListener('click', doLogin);
-document.getElementById('passInput').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-</script>
-</body>
+      document
+        .getElementById("loginPasteBtn")
+        .addEventListener("click", async () => {
+          try {
+            const text = await navigator.clipboard.readText();
+            document.getElementById("passInput").value = text.trim();
+            document.getElementById("passInput").focus();
+          } catch {
+            const el = document.getElementById("loginResult");
+            el.textContent = "Clipboard access denied — paste manually.";
+            el.className = "result warn";
+          }
+        });
+    </script>
+  </body>
 </html>
