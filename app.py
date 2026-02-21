@@ -577,11 +577,11 @@ def handle_connect():
 def home():
     return send_from_directory('.', 'index.html')
 
-@app.route('/dashboard')
+@app.route('/')
 def dashboard():
     return send_from_directory('.', 'admin.html')
 
-@app.route('/api')
+@app.route('/')
 def api_redirect():
     return send_from_directory('.', 'api.php')
 
