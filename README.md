@@ -18,6 +18,5 @@
 ### Prerequisites
 - Python 3.8+
 - MongoDB instance
-- Git
 
 
