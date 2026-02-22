@@ -39,5 +39,5 @@ A secure license key management system with hardware ID (HWID) locking and libra
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/azxion-admin.git
-cd azxion-admin
+https://github.com/Kezxeon/JSPANEL.git
+cd JSPANEL
