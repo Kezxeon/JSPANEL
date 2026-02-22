@@ -632,18 +632,25 @@ def handle_login():
         if key_doc.get("status") == "banned":
             return jsonify({"success": False, "message": "Key is banned"})
 
-        if key_doc.get("expires"):
-            expiry = datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S")
-            if expiry < datetime.now():
-                keys_collection.update_one(
-                    {"key": user_key}, {"$set": {"status": "expired"}}
-                )
-                return jsonify({"success": False, "message": "Key has expired"})
+        # FIX: Check if expires exists and is not None before parsing
+        expires_value = key_doc.get("expires")
+        if expires_value:
+            try:
+                expiry = datetime.strptime(expires_value, "%Y-%m-%d %H:%M:%S")
+                if expiry < datetime.now():
+                    keys_collection.update_one(
+                        {"key": user_key}, {"$set": {"status": "expired"}}
+                    )
+                    return jsonify({"success": False, "message": "Key has expired"})
+            except (ValueError, TypeError):
+                pass
 
         if key_doc.get("status") == "expired":
             return jsonify({"success": False, "message": "Key has expired"})
 
-        return jsonify({"success": True, "expiry": key_doc.get("expires", "Lifetime")})
+        return jsonify(
+            {"success": True, "expiry": expires_value if expires_value else "Lifetime"}
+        )
     except Exception as e:
         logging.error(f"Login error: {e}")
         return jsonify({"success": False, "message": "Login error"})
@@ -687,13 +694,19 @@ def handle_connect():
         if key_doc.get("status") == "expired":
             return send_enc_err("Key has expired", AES_KEY)
 
-        if key_doc.get("expires"):
-            expiry = datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S")
-            if expiry < datetime.now():
-                keys_collection.update_one(
-                    {"key": user_key}, {"$set": {"status": "expired"}}
-                )
-                return send_enc_err("Key has expired", AES_KEY)
+        # FIX: Check if expires exists and is not None before parsing
+        expires_value = key_doc.get("expires")
+        if expires_value:  # Only check expiry if it's not None/empty
+            try:
+                expiry = datetime.strptime(expires_value, "%Y-%m-%d %H:%M:%S")
+                if expiry < datetime.now():
+                    keys_collection.update_one(
+                        {"key": user_key}, {"$set": {"status": "expired"}}
+                    )
+                    return send_enc_err("Key has expired", AES_KEY)
+            except (ValueError, TypeError):
+                # If date parsing fails, treat as invalid
+                pass
 
         hwids = key_doc.get("hwids", [])
         if not isinstance(hwids, list):
@@ -751,7 +764,7 @@ def handle_connect():
             "data": {
                 "token": token,
                 "rng": int(time.time()),
-                "expiredDate": key_doc.get("expires", "Lifetime"),
+                "expiredDate": expires_value if expires_value else "Lifetime",
                 "checked": checked,
             },
         }
@@ -781,8 +794,13 @@ def serve_files(filename):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("\n" + "=" * 70)
+    print("🚀 AZZXION ADMIN PANEL - SECURE BACKEND")
     print("=" * 70)
+    print(f"✓ Database: MongoDB (azxpanel)")
+    print(f"✓ Admin Password: {'*' * len(ADMIN_PASSWORD)}")
+    print(f"✓ Encryption: AES-256-GCM")
+    print(f"✓ Game ID: {GAME_ID}")
     print(f"✓ API Endpoint: http://0.0.0.0:5000/api.php")
     print("=" * 70 + "\n")
-    app.run(debug=False, host="0.0.0.0", port=5000)
 
+    app.run(debug=False, host="0.0.0.0", port=5000)
