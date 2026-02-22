@@ -57,10 +57,18 @@ SECRET_SALT = get_config_value("SECRET_SALT", "").strip()
 ADMIN_PASSWORD = get_config_value("ADMIN_PASSWORD", "").strip()
 
 
+MAX_LOGS = 50
+LOG_TTL_HOURS = 24
+SESSION_TTL_MINUTES = 10
+SESSION_TTL_SAFE_HOURS = 24
+
 try:
     keys_collection.create_index("key", unique=True, sparse=True)
     libraries_collection.create_index("filename", unique=True, sparse=True)
-    sessions_collection.create_index("exp", expireAfterSeconds=0)  # TTL
+    sessions_collection.create_index("exp_dt", expireAfterSeconds=0)
+    db["audit_logs"].create_index(
+        "timestamp", expireAfterSeconds=LOG_TTL_HOURS * 3600
+    )
 except Exception as e:
     logging.warning(f"Index creation notice: {e}")
 
@@ -100,6 +108,28 @@ def rate_limit(max_calls=10, time_window=60):
     return decorator
 
 
+
+
+def purge_old_logs():
+    try:
+        audit_logs = db["audit_logs"]
+        cutoff = datetime.now() - timedelta(hours=LOG_TTL_HOURS)
+        audit_logs.delete_many({"timestamp": {"$lt": cutoff}})
+
+        total = audit_logs.count_documents({})
+        if total >= MAX_LOGS:
+            overflow = total - MAX_LOGS + 1
+            oldest = list(
+                audit_logs.find({}, {"_id": 1})
+                .sort("timestamp", 1)
+                .limit(overflow)
+            )
+            ids_to_delete = [doc["_id"] for doc in oldest]
+            audit_logs.delete_many({"_id": {"$in": ids_to_delete}})
+    except Exception as e:
+        logging.error(f"Failed to purge old logs: {e}")
+
+
 def log_action(action, key=None, status="success", details=None):
     log_entry = {
         "timestamp": datetime.now(),
@@ -110,6 +140,7 @@ def log_action(action, key=None, status="success", details=None):
         "details": details,
     }
     try:
+        purge_old_logs()
         db["audit_logs"].insert_one(log_entry)
     except Exception as e:
         logging.error(f"Failed to log action: {e}")
@@ -175,8 +206,14 @@ def delete_library(filename):
 
 def create_session(token, exp_time):
     try:
+        exp_datetime = datetime.utcfromtimestamp(exp_time)
         sessions_collection.insert_one(
-            {"token": token, "exp": exp_time, "created": datetime.now()}
+            {
+                "token": token,
+                "exp": exp_time,
+                "exp_dt": exp_datetime,
+                "created": datetime.now(),
+            }
         )
     except Exception as e:
         logging.error(f"Error creating session: {e}")
@@ -184,9 +221,12 @@ def create_session(token, exp_time):
 
 def validate_session(token):
     try:
+        now = time.time()
         session = sessions_collection.find_one(
-            {"token": token, "exp": {"$gt": time.time()}}
+            {"token": token, "exp": {"$gt": now}}
         )
+        if session is None:
+            sessions_collection.delete_many({"exp": {"$lte": now}})
         return session is not None
     except Exception as e:
         logging.error(f"Error validating session: {e}")
@@ -286,6 +326,8 @@ def handle_ping():
 @rate_limit(max_calls=5, time_window=60)
 def handle_admin_login():
     password = request.form.get("password", "")
+    safe_key = request.form.get("safe_key", "false").lower() in ("true", "1", "yes")
+
     if not password:
         return jsonify({"success": False, "message": "Password required"})
 
@@ -294,12 +336,18 @@ def handle_admin_login():
         return jsonify({"success": False, "message": "Invalid password"})
 
     token = secrets.token_hex(32)
-    exp_time = time.time() + 7200
+
+    if safe_key:
+        exp_time = time.time() + SESSION_TTL_SAFE_HOURS * 3600
+        session_type = "safe"
+    else:
+        exp_time = time.time() + SESSION_TTL_MINUTES * 60
+        session_type = "standard"
 
     try:
         create_session(token, exp_time)
-        log_action("admin_login", status="success")
-        return jsonify({"success": True, "token": token})
+        log_action("admin_login", status="success", details=f"session={session_type}")
+        return jsonify({"success": True, "token": token, "session_type": session_type})
     except Exception as e:
         logging.error(f"Login error: {e}")
         return jsonify({"success": False, "message": "Login failed"})
@@ -328,7 +376,7 @@ def handle_generate_keys():
                 if custom_name:
                     k = custom_name if qty == 1 else f"{custom_name}-{i+1}"
                 else:
-                    k = f"Azxion-{secrets.token_hex(5)}"
+                    k = f"Azxion-{secrets.token_hex(5).upper()}"
 
                 if k not in keys:
                     break
@@ -661,13 +709,12 @@ def serve_files(filename):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("\n" + "=" * 70)
-    print("🚀 AZZXION ADMIN PANEL - SECURE BACKEND")
     print("=" * 70)
     print(f"✓ Database: MongoDB (azxpanel)")
     print(f"✓ Admin Password: {'*' * len(ADMIN_PASSWORD)}")
     print(f"✓ Encryption: AES-256-GCM")
     print(f"✓ Game ID: {GAME_ID}")
-    print(f"✓ API Endpoint: http://0.0.0.0:5000/api.php")
+    #print(f"✓ API Endpoint: http://0.0.0.0:5000/api.php")
     print("=" * 70 + "\n")
 
     app.run(debug=False, host="0.0.0.0", port=5000)
