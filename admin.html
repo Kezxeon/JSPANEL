@@ -83,11 +83,11 @@
                 </div>
 
                 <div class="field-label" style="margin-top: 14px">
-                  NOTE (optional)
+                  MAX DEVICE COUNT (optional)
                 </div>
                 <div class="input-wrap">
                   <span class="input-icon">⬡</span>
-                  <input type="text" id="keyNote" />
+                  <input type="number" id="keyMaxDevices" min="1" max="999" />
                 </div>
 
                 <button class="auth-btn" id="generateBtn">
@@ -206,8 +206,8 @@
                     <th>KEY</th>
                     <th>STATUS</th>
                     <th>EXPIRES</th>
+                    <th>DEVICES</th>
                     <th>HWID</th>
-                    <th>NOTE</th>
                     <th>ACTIONS</th>
                   </tr>
                 </thead>
