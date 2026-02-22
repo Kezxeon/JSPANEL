@@ -710,11 +710,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("\n" + "=" * 70)
     print("=" * 70)
-    print(f"✓ Database: MongoDB (azxpanel)")
-    print(f"✓ Admin Password: {'*' * len(ADMIN_PASSWORD)}")
-    print(f"✓ Encryption: AES-256-GCM")
-    print(f"✓ Game ID: {GAME_ID}")
     #print(f"✓ API Endpoint: http://0.0.0.0:5000/api.php")
     print("=" * 70 + "\n")
 
     app.run(debug=False, host="0.0.0.0", port=5000)
+
