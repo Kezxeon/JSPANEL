@@ -1,86 +1,28 @@
-// admin.js — CFL Admin Panel with Library Management
-
 const API = "./api.php";
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
-// ─── Custom Confirmation Dialog ────────────────────────────────────────────
 function showConfirmDialog(message, title = "Confirm Action") {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
-    backdrop.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-    `;
+    backdrop.className = "confirm-dialog";
 
     const dialog = document.createElement("div");
-    dialog.style.cssText = `
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px;
-      max-width: 420px;
-      width: 90%;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-      animation: slideInUp 0.3s ease forwards;
-    `;
+    dialog.className = "confirm-dialog-content";
 
     dialog.innerHTML = `
-      <div style="font-size: 1.4rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-align: left;">
-        <span style="font-size: 1.6rem;">⚠️</span>
+      <div class="confirm-dialog-header">
+        <span>⚠️</span>
         <span>${title}</span>
       </div>
-      <div style="color: var(--text); margin-bottom: 24px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; text-align: center;">${message}
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button class="confirm-cancel" style="
-          padding: 10px 24px;
-          border: 1px solid var(--border);
-          background: var(--panel);
-          color: var(--text);
-          border-radius: 4px;
-          cursor: pointer;
-          font-family: var(--font-main);
-          font-weight: 600;
-          transition: all 0.2s ease;
-        ">CANCEL</button>
-        <button class="confirm-ok" style="
-          padding: 10px 24px;
-          border: 1px solid var(--success);
-          background: var(--success);
-          color: var(--bg);
-          border-radius: 4px;
-          cursor: pointer;
-          font-family: var(--font-main);
-          font-weight: 600;
-          transition: all 0.2s ease;
-        ">OK</button>
+      <div class="confirm-dialog-message">${message}</div>
+      <div class="confirm-dialog-buttons">
+        <button class="confirm-cancel">CANCEL</button>
+        <button class="confirm-ok">OK</button>
       </div>
     `;
 
     const cancelBtn = dialog.querySelector(".confirm-cancel");
     const okBtn = dialog.querySelector(".confirm-ok");
-
-    cancelBtn.addEventListener("mouseover", () => {
-      cancelBtn.style.background = "var(--border)";
-    });
-    cancelBtn.addEventListener("mouseout", () => {
-      cancelBtn.style.background = "var(--panel)";
-    });
-
-    okBtn.addEventListener("mouseover", () => {
-      okBtn.style.opacity = "0.9";
-    });
-    okBtn.addEventListener("mouseout", () => {
-      okBtn.style.opacity = "1";
-    });
 
     cancelBtn.addEventListener("click", () => {
       backdrop.remove();
@@ -94,12 +36,10 @@ function showConfirmDialog(message, title = "Confirm Action") {
 
     backdrop.appendChild(dialog);
     document.body.appendChild(backdrop);
-
     okBtn.focus();
   });
 }
 
-// ─── Guard: redirect to login if no token ────────────────────────────────────
 (function () {
   if (!sessionStorage.getItem("adminToken")) {
     window.location.href = "index.html";
@@ -110,7 +50,6 @@ function token() {
   return sessionStorage.getItem("adminToken") || "";
 }
 
-// ─── Page Navigation ──────────────────────────────────────────────────────────
 function initNavigation() {
   const navItems = document.querySelectorAll(".nav-item");
   const pages = {
@@ -122,21 +61,17 @@ function initNavigation() {
     item.addEventListener("click", () => {
       const pageName = item.getAttribute("data-page");
 
-      // Hide all pages
       Object.values(pages).forEach((page) => {
         if (page) page.classList.add("hidden");
       });
 
-      // Show selected page
       if (pages[pageName]) {
         pages[pageName].classList.remove("hidden");
       }
 
-      // Update nav active state
       navItems.forEach((i) => i.classList.remove("active"));
       item.classList.add("active");
 
-      // Load page-specific data
       if (pageName === "libraries") {
         loadLibsList();
       } else if (pageName === "dashboard") {
@@ -146,20 +81,20 @@ function initNavigation() {
   });
 }
 
-// ─── Logout ───────────────────────────────────────────────────────────────────
 document.getElementById("logoutBtn").addEventListener("click", () => {
   sessionStorage.removeItem("adminToken");
   window.location.href = "index.html";
 });
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
 function showResult(el, msg, type = "error") {
   el.textContent = msg;
   el.className = "result " + type;
 }
+
 function hideResult(el) {
   el.className = "result hidden";
 }
+
 function setLoading(btn, on) {
   const t = btn.querySelector(".btn-text");
   const l = btn.querySelector(".btn-loader");
@@ -177,7 +112,6 @@ async function apiFetch(action, extra = {}) {
   return r.json();
 }
 
-// ─── Generate Keys ────────────────────────────────────────────────────────────
 const generateBtn = document.getElementById("generateBtn");
 const genResult = document.getElementById("genResult");
 const genKeys = document.getElementById("genKeys");
@@ -189,7 +123,6 @@ generateBtn.addEventListener("click", async () => {
   genKeys.classList.add("hidden");
 
   const customNameValue = document.getElementById("keyCustomName").value.trim();
-  console.log("Custom name value:", customNameValue);
 
   try {
     const data = await apiFetch("generate_keys", {
@@ -198,7 +131,6 @@ generateBtn.addEventListener("click", async () => {
       custom_name: customNameValue,
       max_devices: document.getElementById("keyMaxDevices").value || 1,
     });
-    console.log("API Response:", data);
 
     if (data.success) {
       showResult(
@@ -206,16 +138,18 @@ generateBtn.addEventListener("click", async () => {
         `✓ Generated ${data.keys.length} key(s)`,
         "success",
       );
-      keysList.innerHTML = data.keys
-        .map(
-          (k) => `
-        <div class="gen-key-item">
-          <span>${k}</span>
-          <button onclick="copyText('${k}', this)">COPY</button>
-        </div>
-      `,
-        )
-        .join("");
+
+      const template = document.getElementById("gen-key-item-template");
+      keysList.innerHTML = "";
+
+      data.keys.forEach((key) => {
+        const clone = template.content.cloneNode(true);
+        clone.querySelector("span").textContent = key;
+        const copyBtn = clone.querySelector(".copy-gen-key");
+        copyBtn.addEventListener("click", () => copyText(key, copyBtn));
+        keysList.appendChild(clone);
+      });
+
       genKeys.classList.remove("hidden");
       loadStats();
     } else {
@@ -247,7 +181,6 @@ function copyText(text, btn) {
   });
 }
 
-// ─── Stats ────────────────────────────────────────────────────────────────────
 async function loadStats() {
   try {
     const data = await apiFetch("get_stats");
@@ -259,9 +192,9 @@ async function loadStats() {
     }
   } catch {}
 }
+
 document.getElementById("refreshStatsBtn").addEventListener("click", loadStats);
 
-// ─── Key Table ────────────────────────────────────────────────────────────────
 document.getElementById("loadKeysBtn").addEventListener("click", loadKeysList);
 document
   .getElementById("searchKey")
@@ -274,6 +207,7 @@ async function loadKeysList() {
   const keysBody = document.getElementById("keysBody");
   keysBody.innerHTML =
     '<tr><td colspan="8" class="empty-msg">Loading...</td></tr>';
+
   try {
     const data = await apiFetch("list_keys", {
       search: document.getElementById("searchKey").value,
@@ -284,32 +218,51 @@ async function loadKeysList() {
       keysBody.innerHTML = `<tr><td colspan="8" class="empty-msg">${data.message}</td></tr>`;
       return;
     }
+
     if (!data.keys?.length) {
       keysBody.innerHTML =
         '<tr><td colspan="8" class="empty-msg">No keys found.</td></tr>';
       return;
     }
 
-    keysBody.innerHTML = data.keys
-      .map(
-        (k) => `
-  <tr class="key-row" data-key="${k.key}">
-    <td><input type="checkbox" class="key-checkbox" value="${k.key}" /></td>
-    <td style="font-family:var(--font-mono);color:var(--accent)">${k.key}</td>
-    <td><span class="badge ${k.status}">${k.status.toUpperCase()}</span></td>
-    <td>${k.expires || "Lifetime"}</td>
-    <td>${k.device_count || 0}/${k.max_devices}</td>
-    <td>
-      <button class="action-btn copy-key" onclick="copyText('${k.key}',this)">COPY</button>
-      <button class="action-btn" onclick="deleteKey('${k.key}')">DELETE</button>
-      <button class="action-btn" onclick="resetDeviceCount('${k.key}')">
-        ${k.device_count && k.device_count > 0 ? `RESET (${k.device_count})` : "RESET"}
-      </button>
-    </td>
-  </tr>
-`,
-      )
-      .join("");
+    const template = document.getElementById("key-row-template");
+    keysBody.innerHTML = "";
+
+    data.keys.forEach((k) => {
+      const clone = template.content.cloneNode(true);
+      const row = clone.querySelector("tr");
+      row.setAttribute("data-key", k.key);
+
+      const checkbox = row.querySelector(".key-checkbox");
+      checkbox.value = k.key;
+
+      row.querySelector("td:nth-child(2)").textContent = k.key;
+
+      const badge = row.querySelector(".badge");
+      badge.className = `badge ${k.status}`;
+      badge.textContent = k.status.toUpperCase();
+
+      row.querySelector("td:nth-child(4)").textContent =
+        k.expires || "Lifetime";
+
+      row.querySelector("td:nth-child(5)").textContent =
+        `${k.device_count || 0}/${k.max_devices}`;
+
+      const copyBtn = row.querySelector(".copy-key");
+      copyBtn.addEventListener("click", () => copyText(k.key, copyBtn));
+
+      const deleteBtn = row.querySelector(".delete-key");
+      deleteBtn.addEventListener("click", () => deleteKey(k.key));
+
+      const resetBtn = row.querySelector(".reset-device");
+      resetBtn.textContent =
+        k.device_count && k.device_count > 0
+          ? `RESET (${k.device_count})`
+          : "RESET";
+      resetBtn.addEventListener("click", () => resetDeviceCount(k.key));
+
+      keysBody.appendChild(clone);
+    });
 
     attachCheckboxListeners();
   } catch (e) {
@@ -384,18 +337,7 @@ async function deleteKey(key) {
   loadStats();
 }
 
-async function resetHWID(key) {
-  if (
-    !confirm(
-      `Reset HWID for: ${key}?\nThis allows the key to be used on a new device.`,
-    )
-  )
-    return;
-  await apiFetch("reset_hwid", { key });
-  loadKeysList();
-}
 async function resetDeviceCount(key) {
-  // First get the current device count from the row data
   const keyRow = document.querySelector(`.key-row[data-key="${key}"]`);
   let currentDeviceCount = 0;
 
@@ -417,7 +359,6 @@ async function resetDeviceCount(key) {
   if (!confirmed) return;
 
   try {
-    // Use the reset_device_count endpoint which clears both
     const data = await apiFetch("reset_device_count", { key });
     if (data.success) {
       showResult(
@@ -441,7 +382,6 @@ async function resetDeviceCount(key) {
     );
   }
 }
-// ─── Library Management ────────────────────────────────────────────────────────
 
 const fileUploadArea = document.getElementById("fileUploadArea");
 const libFileInput = document.getElementById("libFileInput");
@@ -450,17 +390,19 @@ const uploadResult = document.getElementById("uploadResult");
 const uploadProgress = document.getElementById("uploadProgress");
 let selectedFile = null;
 
-// Drag and drop
 fileUploadArea.addEventListener("click", () => libFileInput.click());
+
 fileUploadArea.addEventListener("dragover", (e) => {
   e.preventDefault();
   fileUploadArea.style.borderColor = "var(--accent)";
   fileUploadArea.style.background = "rgba(0, 245, 255, 0.05)";
 });
+
 fileUploadArea.addEventListener("dragleave", () => {
   fileUploadArea.style.borderColor = "var(--border)";
   fileUploadArea.style.background = "transparent";
 });
+
 fileUploadArea.addEventListener("drop", (e) => {
   e.preventDefault();
   fileUploadArea.style.borderColor = "var(--border)";
@@ -582,7 +524,6 @@ uploadBtn.addEventListener("click", async () => {
   }
 });
 
-// Library List
 document.getElementById("loadLibsBtn").addEventListener("click", loadLibsList);
 document
   .getElementById("searchLib")
@@ -602,30 +543,46 @@ async function loadLibsList() {
       libsBody.innerHTML = `<tr><td colspan="7" class="empty-msg">${data.message}</td></tr>`;
       return;
     }
+
     if (!data.libraries?.length) {
       libsBody.innerHTML =
         '<tr><td colspan="7" class="empty-msg">No libraries found.</td></tr>';
       return;
     }
 
-    libsBody.innerHTML = data.libraries
-      .map(
-        (lib) => `
-      <tr class="lib-row" data-file="${lib.filename}">
-        <td><input type="checkbox" class="lib-checkbox" value="${lib.filename}" /></td>
-        <td style="font-family:var(--font-mono);color:var(--accent)">${lib.filename}</td>
-        <td>${formatFileSize(lib.size)}</td>
-        <td>${lib.version || "—"}</td>
-        <td>${lib.uploaded || "—"}</td>
-        <td>${lib.description || "—"}</td>
-        <td>
-          <button class="action-btn" onclick="downloadLibrary('${lib.filename}')">DOWNLOAD</button>
-          <button class="action-btn" onclick="deleteLibrary('${lib.filename}')">DELETE</button>
-        </td>
-      </tr>
-    `,
-      )
-      .join("");
+    const template = document.getElementById("lib-row-template");
+    libsBody.innerHTML = "";
+
+    data.libraries.forEach((lib) => {
+      const clone = template.content.cloneNode(true);
+      const row = clone.querySelector("tr");
+      row.setAttribute("data-file", lib.filename);
+
+      const checkbox = row.querySelector(".lib-checkbox");
+      checkbox.value = lib.filename;
+
+      row.querySelector("td:nth-child(2)").textContent = lib.filename;
+
+      row.querySelector("td:nth-child(3)").textContent = formatFileSize(
+        lib.size,
+      );
+
+      row.querySelector("td:nth-child(4)").textContent = lib.version || "—";
+
+      row.querySelector("td:nth-child(5)").textContent = lib.uploaded || "—";
+
+      row.querySelector("td:nth-child(6)").textContent = lib.description || "—";
+
+      const downloadBtn = row.querySelector(".download-lib");
+      downloadBtn.addEventListener("click", () =>
+        downloadLibrary(lib.filename),
+      );
+
+      const deleteBtn = row.querySelector(".delete-lib");
+      deleteBtn.addEventListener("click", () => deleteLibrary(lib.filename));
+
+      libsBody.appendChild(clone);
+    });
 
     attachLibCheckboxListeners();
   } catch (e) {
@@ -723,6 +680,5 @@ function debounce(fn, ms) {
   };
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
 initNavigation();
 loadStats();

@@ -16,7 +16,6 @@
     <div class="noise"></div>
 
     <div class="container admin-page">
-      <!-- Top Navigation -->
       <nav class="admin-nav">
         <div class="nav-brand">
           <span class="brand">AZZXION ADMIN</span>
@@ -32,7 +31,6 @@
         </div>
       </nav>
 
-      <!-- Dashboard Page (Keys Management) -->
       <div id="dashboardPage" class="admin-page-content">
         <div id="adminDash" class="admin-dash">
           <div class="admin-header">
@@ -223,7 +221,6 @@
         </div>
       </div>
 
-      <!-- Libraries Page -->
       <div id="librariesPage" class="admin-page-content hidden">
         <div class="admin-dash">
           <div class="admin-header">
@@ -374,6 +371,43 @@
         </div>
       </div>
     </div>
+
+    <template id="key-row-template">
+      <tr class="key-row">
+        <td><input type="checkbox" class="key-checkbox" /></td>
+        <td style="font-family: var(--font-mono); color: var(--accent)"></td>
+        <td><span class="badge"></span></td>
+        <td></td>
+        <td></td>
+        <td>
+          <button class="action-btn copy-key">COPY</button>
+          <button class="action-btn delete-key">DELETE</button>
+          <button class="action-btn reset-device">RESET</button>
+        </td>
+      </tr>
+    </template>
+
+    <template id="gen-key-item-template">
+      <div class="gen-key-item">
+        <span></span>
+        <button class="copy-gen-key">COPY</button>
+      </div>
+    </template>
+
+    <template id="lib-row-template">
+      <tr class="lib-row">
+        <td><input type="checkbox" class="lib-checkbox" /></td>
+        <td style="font-family: var(--font-mono); color: var(--accent)"></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>
+          <button class="action-btn download-lib">DOWNLOAD</button>-
+          <button class="action-btn delete-lib">DELETE</button>
+        </td>
+      </tr>
+    </template>
 
     <script src="admin.js"></script>
   </body>

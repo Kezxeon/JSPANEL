@@ -352,15 +352,14 @@ def handle_generate_keys():
     qty = int(request.form.get("qty", 1))
     qty = max(1, min(100, qty))
     custom_name = request.form.get("custom_name", "").strip()
-    max_devices = request.form.get("max_devices", "1").strip()  # Changed default to "1"
+    max_devices = request.form.get("max_devices", "1").strip()
 
     try:
-        max_devices = int(max_devices) if max_devices else 1  # Changed from 0 to 1
-        # Ensure at least 1 device
+        max_devices = int(max_devices) if max_devices else 1
         if max_devices < 1:
             max_devices = 1
     except:
-        max_devices = 1  # Changed from 0 to 1
+        max_devices = 1
 
     if duration > 0:
         expires = (datetime.now() + timedelta(days=duration)).strftime(
@@ -386,10 +385,10 @@ def handle_generate_keys():
                 "key": k,
                 "status": "unused",
                 "hwid": None,
-                "hwids": [],  # Initialize empty list for multiple devices
+                "hwids": [],
                 "expires": expires,
-                "max_devices": max_devices,  # Will now be at least 1
-                "device_count": 0,  # Start at 0, will become 1 on first use
+                "max_devices": max_devices,
+                "device_count": 0,
                 "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "last_used": None,
             }
@@ -497,7 +496,6 @@ def handle_reset_hwid():
 def handle_reset_device_count():
     key = request.form.get("key", "")
     try:
-        # FIX: Clear both hwids list and device_count, reset to unused
         keys_collection.update_one(
             {"key": key},
             {
@@ -652,16 +650,10 @@ def handle_login():
 
 
 def handle_connect():
-    """
-    Multi-device support:
-    - Allows a key to be used on multiple different devices
-    - Each new device increments device_count
-    - Respects max_devices limit
-    """
     game = request.form.get("game", "")
     auth = request.form.get("auth", "")
     user_key = request.form.get("user_key", "")
-    serial = request.form.get("serial", "")  # HWID - device identifier
+    serial = request.form.get("serial", "")
     t = request.form.get("t", "0")
     sig = request.form.get("sig", "")
 
@@ -695,7 +687,6 @@ def handle_connect():
         if key_doc.get("status") == "expired":
             return send_enc_err("Key has expired", AES_KEY)
 
-        # Check expiration
         if key_doc.get("expires"):
             expiry = datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S")
             if expiry < datetime.now():
@@ -704,11 +695,8 @@ def handle_connect():
                 )
                 return send_enc_err("Key has expired", AES_KEY)
 
-        # MULTI-DEVICE LOGIC FIXED
-        # Get list of HWIDs that have used this key
         hwids = key_doc.get("hwids", [])
         if not isinstance(hwids, list):
-            # Handle old single-HWID format by converting to list
             old_hwid = key_doc.get("hwid")
             if old_hwid:
                 hwids = [old_hwid] if old_hwid else []
@@ -718,28 +706,21 @@ def handle_connect():
         max_devices = key_doc.get("max_devices", 0)
         device_count = len(hwids)
 
-        # FIX 1: Check if this device is authorized
         if serial not in hwids:
-            # This is a NEW device trying to use the key
 
-            # Check device limit
             if max_devices > 0 and device_count >= max_devices:
                 return send_enc_err(
                     f"Device limit exceeded ({device_count}/{max_devices})", AES_KEY
                 )
 
-            # Add this device to the list
             hwids.append(serial)
 
-            # Update with new HWID list and increment device count
             update_data = {
                 "hwids": hwids,
                 "device_count": len(hwids),
                 "status": "active",
                 "last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
-
-            # FIX 2: Also update the legacy hwid field for backward compatibility
             if len(hwids) == 1:
                 update_data["hwid"] = serial
 
@@ -747,15 +728,12 @@ def handle_connect():
                 f"Key {user_key} used on new device. Device count: {len(hwids)}/{max_devices if max_devices > 0 else 'unlimited'}"
             )
         else:
-            # Same device using the key again, just update last_used
             update_data = {
                 "status": "active",
                 "last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
 
-        # FIX 3: Ensure device_count is never 0 when key is in use
         if key_doc.get("status") == "unused" and serial in hwids:
-            # This is the first time this key is being used
             if len(hwids) == 0:
                 hwids = [serial]
                 update_data["hwids"] = hwids
@@ -764,7 +742,6 @@ def handle_connect():
 
         keys_collection.update_one({"key": user_key}, {"$set": update_data})
 
-        # Generate response
         checked_str = f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}"
         checked = hashlib.md5(checked_str.encode("utf-8")).hexdigest()
         token = hashlib.md5(user_key.encode("utf-8")).hexdigest()
