@@ -1,5 +1,3 @@
-# app.py - Updated with Library Management System & MongoDB Integration
-
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -20,31 +18,49 @@ import struct
 from werkzeug.utils import secure_filename
 
 
-# MongoDB Connection
 mongo_uri = os.getenv("MONGO_URI")
-if mongo_uri:
-    client = MongoClient(mongo_uri)
-else:
-    client = MongoClient(
-        "mongodb+srv://azxpanel:azxpanelpasswrd@render.4qwq74m.mongodb.net/?appName=Render"
-    )
+mongo_user = os.getenv("MONGO_USER")
+mongo_pass = os.getenv("MONGO_PASS")
+mongo_host = os.getenv("MONGO_HOST")
+mongo_dbname = os.getenv("MONGO_DB", "azxpanel")
 
-db = client["azxpanel"]
+if mongo_uri:
+    client = MongoClient(mongo_uri.strip())
+elif mongo_user and mongo_pass and mongo_host:
+    user = mongo_user.strip()
+    password = mongo_pass.strip()
+    host = mongo_host.strip()
+    client = MongoClient(f"mongodb+srv://{user}:{password}@{host}/?retryWrites=true&w=majority")
+else:
+    raise Exception("MongoDB credentials are not set in environment variables!")
+
+db = client[mongo_dbname]
+
 keys_collection = db["keys"]
 libraries_collection = db["libraries"]
 sessions_collection = db["sessions"]
 
-# Ensure indexes
 keys_collection.create_index("key", unique=True, sparse=True)
-sessions_collection.create_index("exp", expireAfterSeconds=0)  # TTL index
+sessions_collection.create_index("exp", expireAfterSeconds=0)
 libraries_collection.create_index("filename", unique=True, sparse=True)
 
-ADMIN_PASSWORD = "changeme"
+config_collection = db["config"]
+
+
+def get_config_value(key, default=None):
+    doc = config_collection.find_one({"key": key})
+    return doc["value"] if doc else default
+
+
+AES_KEY_B64 = get_config_value("AES_KEY_B64", "").strip()
+SECRET_SALT = get_config_value("SECRET_SALT", "").strip()
+ADMIN_PASSWORD = get_config_value("ADMIN_PASSWORD", "").strip()
+
 LIBRARIES_DIR = os.path.join(os.path.dirname(__file__), "AzxLibraries")
-MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
-AES_KEY_B64 = "ijIe7lzCGmmunuhiZ6I/f97NNBAVlLmhaEsfDZJe8eU="
+MAX_FILE_SIZE = 20 * 1024 * 1024
+
 GAME_ID = "AzxiePanel"
-SECRET_SALT = "Nh3Dv2WJ9jxfsbEzqWjRlA4KgFY9VQ8H"
+
 SUCCESS_STATUS = 945734
 
 app = Flask(__name__, static_folder=".", static_url_path="")
