@@ -16,7 +16,11 @@ from functools import wraps
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import struct
 from werkzeug.utils import secure_filename
+from pymongo import MongoClient
+import os
 
+client = MongoClient(os.environ["MONGO_URI"])
+db = client["azxpanel"]
 
 ADMIN_PASSWORD = "changeme"
 KEYS_FILE = os.path.join(os.path.dirname(__file__), "data", "keys.json")
@@ -593,3 +597,4 @@ def serve_files(filename):
 if __name__ == "__main__":
     print(f"Server starting..")
     app.run(debug=False, host="0.0.0.0", port=5000)
+
