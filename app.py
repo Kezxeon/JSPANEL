@@ -66,9 +66,7 @@ try:
     keys_collection.create_index("key", unique=True, sparse=True)
     libraries_collection.create_index("filename", unique=True, sparse=True)
     sessions_collection.create_index("exp_dt", expireAfterSeconds=0)
-    db["audit_logs"].create_index(
-        "timestamp", expireAfterSeconds=LOG_TTL_HOURS * 3600
-    )
+    db["audit_logs"].create_index("timestamp", expireAfterSeconds=LOG_TTL_HOURS * 3600)
 except Exception as e:
     logging.warning(f"Index creation notice: {e}")
 
@@ -108,8 +106,6 @@ def rate_limit(max_calls=10, time_window=60):
     return decorator
 
 
-
-
 def purge_old_logs():
     try:
         audit_logs = db["audit_logs"]
@@ -120,9 +116,7 @@ def purge_old_logs():
         if total >= MAX_LOGS:
             overflow = total - MAX_LOGS + 1
             oldest = list(
-                audit_logs.find({}, {"_id": 1})
-                .sort("timestamp", 1)
-                .limit(overflow)
+                audit_logs.find({}, {"_id": 1}).sort("timestamp", 1).limit(overflow)
             )
             ids_to_delete = [doc["_id"] for doc in oldest]
             audit_logs.delete_many({"_id": {"$in": ids_to_delete}})
@@ -222,9 +216,7 @@ def create_session(token, exp_time):
 def validate_session(token):
     try:
         now = time.time()
-        session = sessions_collection.find_one(
-            {"token": token, "exp": {"$gt": now}}
-        )
+        session = sessions_collection.find_one({"token": token, "exp": {"$gt": now}})
         if session is None:
             sessions_collection.delete_many({"exp": {"$lte": now}})
         return session is not None
@@ -305,6 +297,7 @@ def api_handler():
         "get_stats": handle_get_stats,
         "delete_key": handle_delete_key,
         "reset_hwid": handle_reset_hwid,
+        "reset_device_count": handle_reset_device_count,
         "upload_library": handle_upload_library,
         "list_libraries": handle_list_libraries,
         "delete_library": handle_delete_library,
@@ -358,8 +351,13 @@ def handle_generate_keys():
     duration = int(request.form.get("duration", 0))
     qty = int(request.form.get("qty", 1))
     qty = max(1, min(100, qty))
-    note = request.form.get("note", "")
     custom_name = request.form.get("custom_name", "").strip()
+    max_devices = request.form.get("max_devices", "0").strip()
+
+    try:
+        max_devices = int(max_devices) if max_devices else 0
+    except:
+        max_devices = 0
 
     if duration > 0:
         expires = (datetime.now() + timedelta(days=duration)).strftime(
@@ -386,7 +384,8 @@ def handle_generate_keys():
                 "status": "unused",
                 "hwid": None,
                 "expires": expires,
-                "note": note if note else None,
+                "max_devices": max_devices if max_devices > 0 else 0,
+                "device_count": 0,
                 "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "last_used": None,
             }
@@ -481,13 +480,39 @@ def handle_reset_hwid():
     key = request.form.get("key", "")
     try:
         keys_collection.update_one(
-            {"key": key}, {"$set": {"hwid": None, "status": "unused"}}
+            {"key": key}, {"$set": {"hwids": [], "device_count": 0, "status": "unused"}}
         )
         log_action("reset_hwid", key=key)
         return jsonify({"success": True})
     except Exception as e:
         logging.error(f"Reset HWID error: {e}")
         return jsonify({"success": False, "message": "Failed to reset HWID"})
+
+
+@require_admin
+def handle_reset_device_count():
+    key = request.form.get("key", "")
+    try:
+        # FIX: Clear both hwids list and device_count, reset to unused
+        keys_collection.update_one(
+            {"key": key},
+            {
+                "$set": {
+                    "device_count": 0,
+                    "hwids": [],
+                    "hwid": None,
+                    "status": "unused",
+                    "last_used": None,
+                }
+            },
+        )
+        log_action("reset_device_count", key=key)
+        return jsonify(
+            {"success": True, "message": "Device count and HWIDs reset successfully"}
+        )
+    except Exception as e:
+        logging.error(f"Reset device count error: {e}")
+        return jsonify({"success": False, "message": "Failed to reset device count"})
 
 
 @require_admin
@@ -623,10 +648,16 @@ def handle_login():
 
 
 def handle_connect():
+    """
+    Multi-device support:
+    - Allows a key to be used on multiple different devices
+    - Each new device increments device_count
+    - Respects max_devices limit
+    """
     game = request.form.get("game", "")
     auth = request.form.get("auth", "")
     user_key = request.form.get("user_key", "")
-    serial = request.form.get("serial", "")
+    serial = request.form.get("serial", "")  # HWID - device identifier
     t = request.form.get("t", "0")
     sig = request.form.get("sig", "")
 
@@ -634,11 +665,13 @@ def handle_connect():
         t_int = int(t)
     except:
         return send_enc_err("Invalid timestamp", AES_KEY)
+
     if game != GAME_ID:
         return send_enc_err("Invalid game ID", AES_KEY)
 
     if abs(time.time() - t_int) > 60:
         return send_enc_err("Timestamp expired", AES_KEY)
+
     message = f"game={game}&auth={auth}&user_key={user_key}&serial={serial}&t={t}"
     expected_sig = hmac_sha256(message, AES_KEY)
 
@@ -654,6 +687,11 @@ def handle_connect():
 
         if key_doc.get("status") == "banned":
             return send_enc_err("Key is banned", AES_KEY)
+
+        if key_doc.get("status") == "expired":
+            return send_enc_err("Key has expired", AES_KEY)
+
+        # Check expiration
         if key_doc.get("expires"):
             expiry = datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S")
             if expiry < datetime.now():
@@ -661,16 +699,68 @@ def handle_connect():
                     {"key": user_key}, {"$set": {"status": "expired"}}
                 )
                 return send_enc_err("Key has expired", AES_KEY)
-        if key_doc.get("hwid") and key_doc["hwid"] != serial:
-            return send_enc_err("HWID mismatch", AES_KEY)
-        if not key_doc.get("hwid"):
-            keys_collection.update_one(
-                {"key": user_key}, {"$set": {"hwid": serial, "status": "active"}}
+
+        # MULTI-DEVICE LOGIC FIXED
+        # Get list of HWIDs that have used this key
+        hwids = key_doc.get("hwids", [])
+        if not isinstance(hwids, list):
+            # Handle old single-HWID format by converting to list
+            old_hwid = key_doc.get("hwid")
+            if old_hwid:
+                hwids = [old_hwid] if old_hwid else []
+            else:
+                hwids = []
+
+        max_devices = key_doc.get("max_devices", 0)
+        device_count = len(hwids)
+
+        # FIX 1: Check if this device is authorized
+        if serial not in hwids:
+            # This is a NEW device trying to use the key
+
+            # Check device limit
+            if max_devices > 0 and device_count >= max_devices:
+                return send_enc_err(
+                    f"Device limit exceeded ({device_count}/{max_devices})", AES_KEY
+                )
+
+            # Add this device to the list
+            hwids.append(serial)
+
+            # Update with new HWID list and increment device count
+            update_data = {
+                "hwids": hwids,
+                "device_count": len(hwids),
+                "status": "active",
+                "last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+            # FIX 2: Also update the legacy hwid field for backward compatibility
+            if len(hwids) == 1:
+                update_data["hwid"] = serial
+
+            logging.info(
+                f"Key {user_key} used on new device. Device count: {len(hwids)}/{max_devices if max_devices > 0 else 'unlimited'}"
             )
-        keys_collection.update_one(
-            {"key": user_key},
-            {"$set": {"last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}},
-        )
+        else:
+            # Same device using the key again, just update last_used
+            update_data = {
+                "status": "active",
+                "last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+        # FIX 3: Ensure device_count is never 0 when key is in use
+        if key_doc.get("status") == "unused" and serial in hwids:
+            # This is the first time this key is being used
+            if len(hwids) == 0:
+                hwids = [serial]
+                update_data["hwids"] = hwids
+                update_data["device_count"] = 1
+                update_data["hwid"] = serial
+
+        keys_collection.update_one({"key": user_key}, {"$set": update_data})
+
+        # Generate response
         checked_str = f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}"
         checked = hashlib.md5(checked_str.encode("utf-8")).hexdigest()
         token = hashlib.md5(user_key.encode("utf-8")).hexdigest()
@@ -686,6 +776,7 @@ def handle_connect():
         }
 
         return send_enc_payload(response_data, AES_KEY)
+
     except Exception as e:
         logging.error(f"Connect error: {e}")
         return send_enc_err("Connection error", AES_KEY)
@@ -709,9 +800,13 @@ def serve_files(filename):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("\n" + "=" * 70)
+    print("🚀 AZZXION ADMIN PANEL - SECURE BACKEND")
     print("=" * 70)
-    #print(f"✓ API Endpoint: http://0.0.0.0:5000/api.php")
+    print(f"✓ Database: MongoDB (azxpanel)")
+    print(f"✓ Admin Password: {'*' * len(ADMIN_PASSWORD)}")
+    print(f"✓ Encryption: AES-256-GCM")
+    print(f"✓ Game ID: {GAME_ID}")
+    print(f"✓ API Endpoint: http://0.0.0.0:5000/api.php")
     print("=" * 70 + "\n")
 
     app.run(debug=False, host="0.0.0.0", port=5000)
-
