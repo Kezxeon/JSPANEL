@@ -1,7 +1,9 @@
-# app.py - Updated with Library Management System
+# app.py - Updated with Library Management System & MongoDB Integration
 
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
+from pymongo import MongoClient
+from bson import ObjectId
 import json
 import os
 import time
@@ -16,16 +18,26 @@ from functools import wraps
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import struct
 from werkzeug.utils import secure_filename
-from pymongo import MongoClient
-import os
 
-client = MongoClient(os.environ["MONGO_URI"])
+
+# MongoDB Connection
+mongo_uri = os.getenv("MONGO_URI")
+if mongo_uri:
+    client = MongoClient(mongo_uri)
+else:
+    client = MongoClient("mongodb+srv://azxpanel:azxpanelpasswrd@render.4qwq74m.mongodb.net/?appName=Render")
+
 db = client["azxpanel"]
+keys_collection = db["keys"]
+libraries_collection = db["libraries"]
+sessions_collection = db["sessions"]
+
+# Ensure indexes
+keys_collection.create_index("key", unique=True, sparse=True)
+sessions_collection.create_index("exp", expireAfterSeconds=0)  # TTL index
+libraries_collection.create_index("filename", unique=True, sparse=True)
 
 ADMIN_PASSWORD = "changeme"
-KEYS_FILE = os.path.join(os.path.dirname(__file__), "data", "keys.json")
-LIBRARIES_FILE = os.path.join(os.path.dirname(__file__), "data", "libraries.json")
-SESSION_FILE = os.path.join(os.path.dirname(__file__), "data", "sessions.json")
 LIBRARIES_DIR = os.path.join(os.path.dirname(__file__), "AzxLibraries")
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 AES_KEY_B64 = "ijIe7lzCGmmunuhiZ6I/f97NNBAVlLmhaEsfDZJe8eU="
@@ -38,57 +50,139 @@ CORS(app)
 
 AES_KEY = base64.b64decode(AES_KEY_B64)
 
-os.makedirs(os.path.dirname(KEYS_FILE), exist_ok=True)
 os.makedirs(LIBRARIES_DIR, exist_ok=True)
 
 
+# ========== MongoDB Functions ==========
+
 def load_keys():
-    if not os.path.exists(KEYS_FILE):
-        return {}
+    """Load all keys from MongoDB"""
     try:
-        with open(KEYS_FILE, "r") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except:
+        keys = {}
+        for doc in keys_collection.find():
+            if "key" in doc:
+                doc_copy = doc.copy()
+                doc_copy.pop("_id", None)
+                keys[doc["key"]] = doc_copy
+        return keys
+    except Exception as e:
+        print(f"Error loading keys: {e}")
         return {}
 
 
 def save_keys(keys):
-    with open(KEYS_FILE, "w") as f:
-        json.dump(keys, f, indent=2)
+    """Save keys to MongoDB"""
+    try:
+        for key, data in keys.items():
+            data_copy = data.copy()
+            data_copy["key"] = key
+            keys_collection.update_one(
+                {"key": key},
+                {"$set": data_copy},
+                upsert=True
+            )
+    except Exception as e:
+        print(f"Error saving keys: {e}")
+
+
+def delete_key_db(key):
+    """Delete a key from MongoDB"""
+    try:
+        keys_collection.delete_one({"key": key})
+    except Exception as e:
+        print(f"Error deleting key: {e}")
 
 
 def load_libraries():
-    if not os.path.exists(LIBRARIES_FILE):
-        return {}
+    """Load all libraries from MongoDB"""
     try:
-        with open(LIBRARIES_FILE, "r") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except:
+        libs = {}
+        for doc in libraries_collection.find():
+            if "filename" in doc:
+                doc_copy = doc.copy()
+                doc_copy.pop("_id", None)
+                libs[doc["filename"]] = doc_copy
+        return libs
+    except Exception as e:
+        print(f"Error loading libraries: {e}")
         return {}
 
 
 def save_libraries(libs):
-    with open(LIBRARIES_FILE, "w") as f:
-        json.dump(libs, f, indent=2)
+    """Save libraries to MongoDB"""
+    try:
+        for filename, data in libs.items():
+            data_copy = data.copy()
+            data_copy["filename"] = filename
+            libraries_collection.update_one(
+                {"filename": filename},
+                {"$set": data_copy},
+                upsert=True
+            )
+    except Exception as e:
+        print(f"Error saving libraries: {e}")
+
+
+def delete_library_db(filename):
+    """Delete a library from MongoDB"""
+    try:
+        libraries_collection.delete_one({"filename": filename})
+    except Exception as e:
+        print(f"Error deleting library: {e}")
 
 
 def load_sessions():
-    if not os.path.exists(SESSION_FILE):
-        return {}
+    """Load all sessions from MongoDB"""
     try:
-        with open(SESSION_FILE, "r") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except:
+        sessions = {}
+        current_time = time.time()
+        for doc in sessions_collection.find({"exp": {"$gt": current_time}}):
+            if "token" in doc:
+                doc_copy = doc.copy()
+                doc_copy.pop("_id", None)
+                sessions[doc["token"]] = doc_copy
+        return sessions
+    except Exception as e:
+        print(f"Error loading sessions: {e}")
         return {}
 
 
 def save_sessions(sessions):
-    with open(SESSION_FILE, "w") as f:
-        json.dump(sessions, f, indent=2)
+    """Save sessions to MongoDB"""
+    try:
+        for token, data in sessions.items():
+            data_copy = data.copy()
+            data_copy["token"] = token
+            sessions_collection.update_one(
+                {"token": token},
+                {"$set": data_copy},
+                upsert=True
+            )
+    except Exception as e:
+        print(f"Error saving sessions: {e}")
 
+
+def create_session(token, exp_time):
+    """Create a new session in MongoDB"""
+    try:
+        sessions_collection.insert_one({
+            "token": token,
+            "exp": exp_time,
+            "created": datetime.now()
+        })
+    except Exception as e:
+        print(f"Error creating session: {e}")
+
+
+def delete_session(token):
+    """Delete a session from MongoDB"""
+    try:
+        sessions_collection.delete_one({"token": token})
+    except Exception as e:
+        print(f"Error deleting session: {e}")
+
+
+# ========== Original Functions ==========
 
 def make_key(custom_name=""):
     if custom_name:
@@ -97,23 +191,26 @@ def make_key(custom_name=""):
 
 
 def require_admin(f):
-
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.form.get("token", "") or request.args.get("token", "")
         if not token:
             return jsonify({"success": False, "message": "Unauthorized"})
 
-        sessions = load_sessions()
-        current_time = time.time()
-        sessions = {k: v for k, v in sessions.items() if v.get("exp", 0) > current_time}
+        try:
+            session = sessions_collection.find_one({
+                "token": token,
+                "exp": {"$gt": time.time()}
+            })
+            
+            if not session:
+                return jsonify(
+                    {"success": False, "message": "Session expired. Please log in again."}
+                )
+        except Exception as e:
+            print(f"Error checking session: {e}")
+            return jsonify({"success": False, "message": "Session error."})
 
-        if token not in sessions:
-            return jsonify(
-                {"success": False, "message": "Session expired. Please log in again."}
-            )
-
-        save_sessions(sessions)
         return f(*args, **kwargs)
 
     return decorated
@@ -152,7 +249,6 @@ def aes_256_gcm_decrypt(ciphertext, iv, tag, key):
 
 
 def send_enc_payload(data_dict, key):
-
     json_str = json.dumps(data_dict)
 
     iv, ciphertext, tag = aes_256_gcm_encrypt(json_str, key)
@@ -169,6 +265,8 @@ def send_enc_payload(data_dict, key):
 def send_enc_err(reason, key):
     return send_enc_payload({"status": 0, "reason": reason}, key)
 
+
+# ========== API Routes ==========
 
 @app.route("/api.php", methods=["POST", "GET", "OPTIONS"])
 def api_handler():
@@ -220,15 +318,15 @@ def handle_admin_login():
         return jsonify({"success": False, "message": "Invalid password."})
 
     token = secrets.token_hex(32)
-    sessions = load_sessions()
-
     current_time = time.time()
-    sessions = {k: v for k, v in sessions.items() if v.get("exp", 0) > current_time}
+    exp_time = current_time + 7200  # 2 hours
 
-    sessions[token] = {"exp": current_time + 7200}
-    save_sessions(sessions)
-
-    return jsonify({"success": True, "token": token})
+    try:
+        create_session(token, exp_time)
+        return jsonify({"success": True, "token": token})
+    except Exception as e:
+        print(f"Error creating session: {e}")
+        return jsonify({"success": False, "message": "Failed to create session."})
 
 
 @require_admin
@@ -277,99 +375,96 @@ def handle_generate_keys():
 
 @require_admin
 def handle_list_keys():
-
     search = request.form.get("search", "").lower()
-    status_filter = request.form.get("status", "")
+    filter_status = request.form.get("status", "")
 
-    keys = load_keys()
-    rows = []
-
-    for k, row in keys.items():
-        if status_filter and row["status"] != status_filter:
-            continue
-
-        if search:
-            key_match = search in k.lower()
-            note_match = (
-                search in (row.get("note", "") or "").lower()
-                if row.get("note")
-                else False
-            )
-            if not (key_match or note_match):
-                continue
-
-        rows.append(row)
-
-    rows.sort(key=lambda x: x.get("created", ""), reverse=True)
-
-    return jsonify({"success": True, "keys": rows[:200]})
+    try:
+        query = {}
+        if filter_status:
+            query["status"] = filter_status
+        
+        all_docs = list(keys_collection.find(query).sort("created", -1).limit(200))
+        rows = []
+        
+        for doc in all_docs:
+            if search:
+                key = doc.get("key", "")
+                note = doc.get("note", "")
+                if search not in key.lower() and search not in str(note).lower():
+                    continue
+            
+            doc.pop("_id", None)
+            rows.append(doc)
+        
+        return jsonify({"success": True, "keys": rows})
+    except Exception as e:
+        print(f"Error listing keys: {e}")
+        return jsonify({"success": True, "keys": []})
 
 
 @require_admin
 def handle_get_stats():
+    try:
+        total = keys_collection.count_documents({})
+        active = keys_collection.count_documents({"status": "active"})
+        unused = keys_collection.count_documents({"status": "unused"})
+        expired = keys_collection.count_documents({"status": "expired"})
+        banned = keys_collection.count_documents({"status": "banned"})
 
-    keys = load_keys()
-    total = len(keys)
-    active = unused = expired = banned = 0
-
-    current_time = time.time()
-
-    for row in keys.values():
-        if (
-            row["status"] not in ["banned", "expired"]
-            and row.get("expires")
-            and datetime.strptime(row["expires"], "%Y-%m-%d %H:%M:%S").timestamp()
-            < current_time
-        ):
-            row["status"] = "expired"
-
-        if row["status"] == "active":
-            active += 1
-        elif row["status"] == "unused":
-            unused += 1
-        elif row["status"] == "expired":
-            expired += 1
-        elif row["status"] == "banned":
-            banned += 1
-
-    return jsonify(
-        {
+        return jsonify(
+            {
+                "success": True,
+                "total": total,
+                "active": active,
+                "used": active + expired,
+                "expired": expired,
+                "unused": unused,
+                "banned": banned,
+            }
+        )
+    except Exception as e:
+        print(f"Error getting stats: {e}")
+        return jsonify({
             "success": True,
-            "total": total,
-            "active": active,
-            "used": active + expired,
-            "expired": expired,
-            "unused": unused,
-            "banned": banned,
-        }
-    )
+            "total": 0,
+            "active": 0,
+            "used": 0,
+            "expired": 0,
+            "unused": 0,
+            "banned": 0
+        })
 
 
 @require_admin
 def handle_delete_key():
-
     key = request.form.get("key", "")
-    keys = load_keys()
-
-    if key in keys:
-        del keys[key]
-        save_keys(keys)
-
-    return jsonify({"success": True})
+    
+    try:
+        delete_key_db(key)
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"Error deleting key: {e}")
+        return jsonify({"success": False, "message": "Failed to delete key."})
 
 
 @require_admin
 def handle_reset_hwid():
-
     key = request.form.get("key", "")
-    keys = load_keys()
-
-    if key in keys:
-        keys[key]["hwid"] = None
-        keys[key]["status"] = "unused"
-        save_keys(keys)
-
-    return jsonify({"success": True})
+    
+    try:
+        keys_collection.update_one(
+            {"key": key},
+            {
+                "$set": {
+                    "hwid": None,
+                    "status": "unused"
+                }
+            }
+        )
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"Error resetting HWID: {e}")
+        return jsonify({"success": False, "message": "Failed to reset HWID."})
 
 
 @require_admin
@@ -405,36 +500,46 @@ def handle_upload_library():
             os.remove(filepath)
             return jsonify({"success": False, "message": "File exceeds 20 MB limit."})
 
-        libs = load_libraries()
-        libs[filename] = {
+        lib_data = {
             "filename": filename,
             "size": file_size,
             "version": lib_version if lib_version else None,
             "description": lib_description if lib_description else None,
             "uploaded": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
-        save_libraries(libs)
+        
+        libraries_collection.update_one(
+            {"filename": filename},
+            {"$set": lib_data},
+            upsert=True
+        )
 
         return jsonify({"success": True, "message": "Library uploaded successfully."})
     except Exception as e:
         if os.path.exists(filepath):
             os.remove(filepath)
+        print(f"Error uploading library: {e}")
         return jsonify({"success": False, "message": f"Upload failed: {str(e)}"})
 
 
 @require_admin
 def handle_list_libraries():
     search = request.form.get("search", "").lower()
-    libs = load_libraries()
-    rows = []
-
-    for lib in libs.values():
-        if search and search not in lib["filename"].lower():
-            continue
-        rows.append(lib)
-
-    rows.sort(key=lambda x: x.get("uploaded", ""), reverse=True)
-    return jsonify({"success": True, "libraries": rows[:200]})
+    
+    try:
+        query = {}
+        if search:
+            query["filename"] = {"$regex": search, "$options": "i"}
+        
+        rows = list(libraries_collection.find(query).sort("uploaded", -1).limit(200))
+        
+        for row in rows:
+            row.pop("_id", None)
+        
+        return jsonify({"success": True, "libraries": rows})
+    except Exception as e:
+        print(f"Error listing libraries: {e}")
+        return jsonify({"success": True, "libraries": []})
 
 
 @require_admin
@@ -442,18 +547,15 @@ def handle_delete_library():
     filename = secure_filename(request.form.get("filename", ""))
     filepath = os.path.join(LIBRARIES_DIR, filename)
 
-    if os.path.exists(filepath) and os.path.isfile(filepath):
-        try:
+    try:
+        if os.path.exists(filepath) and os.path.isfile(filepath):
             os.remove(filepath)
-        except Exception as e:
-            return jsonify({"success": False, "message": f"Failed to delete file: {str(e)}"})
 
-    libs = load_libraries()
-    if filename in libs:
-        del libs[filename]
-        save_libraries(libs)
-
-    return jsonify({"success": True})
+        delete_library_db(filename)
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"Error deleting library: {e}")
+        return jsonify({"success": False, "message": f"Failed to delete library: {str(e)}"})
 
 
 @require_admin
@@ -467,44 +569,44 @@ def handle_download_library():
     try:
         return send_file(filepath, as_attachment=True, download_name=filename)
     except Exception as e:
+        print(f"Error downloading library: {e}")
         return jsonify({"success": False, "message": f"Download failed: {str(e)}"}), 500
 
 
 def handle_login():
-
     user_key = request.form.get("user_key", "")
     if not user_key:
         return jsonify({"success": False, "message": "Key required."})
 
-    keys = load_keys()
+    try:
+        key_doc = keys_collection.find_one({"key": user_key})
+        
+        if not key_doc:
+            return jsonify({"success": False, "message": "Invalid key."})
 
-    if user_key not in keys:
-        return jsonify({"success": False, "message": "Invalid key."})
+        if key_doc.get("status") == "banned":
+            return jsonify({"success": False, "message": "Key is banned."})
 
-    row = keys[user_key]
+        if key_doc.get("expires"):
+            if datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S").timestamp() < time.time():
+                keys_collection.update_one(
+                    {"key": user_key},
+                    {"$set": {"status": "expired"}}
+                )
+                return jsonify({"success": False, "message": "Key has expired."})
 
-    if row["status"] == "banned":
-        return jsonify({"success": False, "message": "Key is banned."})
-
-    if row.get("expires"):
-        if (
-            datetime.strptime(row["expires"], "%Y-%m-%d %H:%M:%S").timestamp()
-            < time.time()
-        ):
-            keys[user_key]["status"] = "expired"
-            save_keys(keys)
+        if key_doc.get("status") == "expired":
             return jsonify({"success": False, "message": "Key has expired."})
 
-    if row["status"] == "expired":
-        return jsonify({"success": False, "message": "Key has expired."})
-
-    return jsonify(
-        {"success": True, "expiry": row["expires"] if row["expires"] else "Lifetime"}
-    )
+        return jsonify(
+            {"success": True, "expiry": key_doc.get("expires") if key_doc.get("expires") else "Lifetime"}
+        )
+    except Exception as e:
+        print(f"Error during login: {e}")
+        return jsonify({"success": False, "message": "Login error."})
 
 
 def handle_connect():
-
     game = request.form.get("game", "")
     auth = request.form.get("auth", "")
     user_key = request.form.get("user_key", "")
@@ -532,69 +634,83 @@ def handle_connect():
         app.logger.warning(f"Signature mismatch: expected={expected_sig}, got={sig}")
         return send_enc_err("Signature mismatch", AES_KEY)
 
-    keys = load_keys()
+    try:
+        key_doc = keys_collection.find_one({"key": user_key})
 
-    if user_key not in keys:
-        return send_enc_err("Key not found", AES_KEY)
+        if not key_doc:
+            return send_enc_err("Key not found", AES_KEY)
 
-    row = keys[user_key]
+        if key_doc.get("status") == "banned":
+            return send_enc_err("Key is banned", AES_KEY)
 
-    if row["status"] == "banned":
-        return send_enc_err("Key is banned", AES_KEY)
+        if key_doc.get("expires"):
+            expiry_time = datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S").timestamp()
+            if expiry_time < time.time():
+                keys_collection.update_one(
+                    {"key": user_key},
+                    {"$set": {"status": "expired"}}
+                )
+                return send_enc_err("Key has expired", AES_KEY)
 
-    if row.get("expires"):
-        expiry_time = datetime.strptime(row["expires"], "%Y-%m-%d %H:%M:%S").timestamp()
-        if expiry_time < time.time():
-            keys[user_key]["status"] = "expired"
-            save_keys(keys)
-            return send_enc_err("Key has expired", AES_KEY)
+        if key_doc.get("hwid") and key_doc["hwid"] != serial:
+            return send_enc_err("HWID mismatch", AES_KEY)
 
-    if row.get("hwid") and row["hwid"] != serial:
-        return send_enc_err("HWID mismatch", AES_KEY)
+        if not key_doc.get("hwid"):
+            keys_collection.update_one(
+                {"key": user_key},
+                {
+                    "$set": {
+                        "hwid": serial,
+                        "status": "active"
+                    }
+                }
+            )
 
-    if not row.get("hwid"):
-        keys[user_key]["hwid"] = serial
-        keys[user_key]["status"] = "active"
+        keys_collection.update_one(
+            {"key": user_key},
+            {"$set": {"last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}
+        )
 
-    keys[user_key]["last_used"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    save_keys(keys)
+        checked_str = f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}"
+        checked = hashlib.md5(checked_str.encode("utf-8")).hexdigest()
 
-    checked_str = f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}"
-    checked = hashlib.md5(checked_str.encode("utf-8")).hexdigest()
+        token = hashlib.md5(user_key.encode("utf-8")).hexdigest()
 
-    token = hashlib.md5(user_key.encode("utf-8")).hexdigest()
+        response_data = {
+            "status": SUCCESS_STATUS,
+            "data": {
+                "token": token,
+                "rng": int(time.time()),
+                "expiredDate": key_doc.get("expires") if key_doc.get("expires") else "Lifetime",
+                "checked": checked,
+            },
+        }
 
-    response_data = {
-        "status": SUCCESS_STATUS,
-        "data": {
-            "token": token,
-            "rng": int(time.time()),
-            "expiredDate": row["expires"] if row["expires"] else "Lifetime",
-            "checked": checked,
-        },
-    }
+        return send_enc_payload(response_data, AES_KEY)
+    except Exception as e:
+        print(f"Error during connect: {e}")
+        return send_enc_err("Connection error", AES_KEY)
 
-    return send_enc_payload(response_data, AES_KEY)
 
+# ========== Static File Routes ==========
 
 @app.route('/')
 def home():
     return send_from_directory('.', 'index.html')
 
-@app.route('/')
+
+@app.route('/admin')
 def dashboard():
     return send_from_directory('.', 'admin.html')
 
-@app.route('/')
-def api_redirect():
-    return send_from_directory('.', 'api.php')
 
-# Keep static files accessible
 @app.route('/<path:filename>')
 def serve_files(filename):
     return send_from_directory('.', filename)
 
-if __name__ == "__main__":
-    print(f"Server starting..")
-    app.run(debug=False, host="0.0.0.0", port=5000)
 
+if __name__ == "__main__":
+    print(f"Server starting with MongoDB integration..")
+    print(f"Database: {db.name}")
+    print(f"Collections: {db.list_collection_names()}")
+    app.run(debug=False, host="0.0.0.0", port=5000)
