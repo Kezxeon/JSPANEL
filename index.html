@@ -121,6 +121,11 @@
             ></span>
           </button>
 
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-family:var(--font-mono);font-size:0.7rem;color:var(--text-muted);letter-spacing:0.1em;user-select:none;">
+            <input type="checkbox" id="safeKeyCheck" style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;" />
+            Save Key
+          </label>
+
           <div id="loginResult" class="result hidden"></div>
         </div>
 
@@ -154,6 +159,7 @@
 
       async function doLogin() {
         const pass = document.getElementById("passInput").value.trim();
+        const safeKey = document.getElementById("safeKeyCheck").checked;
         if (!pass) {
           showErr("Password required.", "warn");
           return;
@@ -167,12 +173,16 @@
           const fd = new FormData();
           fd.append("action", "admin_login");
           fd.append("password", pass);
+          fd.append("safe_key", safeKey ? "true" : "false");
           const r = await fetch(API, { method: "POST", body: fd });
           const data = await r.json();
 
           if (data.success) {
             sessionStorage.setItem("adminToken", data.token);
-            showErr("✓ ACCESS GRANTED", "success");
+            const msg = safeKey
+              ? "✓ ACCESS GRANTED"
+              : "✓ ACCESS GRANTED";
+            showErr(msg, "success");
             setTimeout(() => {
               window.location.href = "admin.html";
             }, 600);
