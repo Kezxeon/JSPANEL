@@ -1,14 +1,18 @@
 <?php
 
+define('ADMIN_PASSWORD', getenv('ADMIN_PASSWORD'));
+define('AES_KEY_B64', getenv('AES_KEY_B64'));
+define('SECRET_SALT', getenv('SECRET_SALT'));
+
 define('ADMIN_PASSWORD', 'changeme');
 define('KEYS_FILE',      __DIR__ . '/data/keys.json');
 define('LIBRARIES_FILE', __DIR__ . '/data/libraries.json');
 define('SESSION_FILE',   __DIR__ . '/data/sessions.json');
 define('LIBRARIES_DIR',  __DIR__ . '/AzxLibraries');
 define('MAX_FILE_SIZE',  20 * 1024 * 1024); // 20 MB
-define('AES_KEY_B64',    'ijIe7lzCGmmunuhiZ6I/f97NNBAVlLmhaEsfDZJe8eU=');
+
 define('GAME_ID',        'AzxiePanel');
-define('SECRET_SALT',    'Nh3Dv2WJ9jxfsbEzqWjRlA4KgFY9VQ8H');
+
 define('SUCCESS_STATUS', 945734);
 
 
