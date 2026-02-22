@@ -352,12 +352,15 @@ def handle_generate_keys():
     qty = int(request.form.get("qty", 1))
     qty = max(1, min(100, qty))
     custom_name = request.form.get("custom_name", "").strip()
-    max_devices = request.form.get("max_devices", "0").strip()
+    max_devices = request.form.get("max_devices", "1").strip()  # Changed default to "1"
 
     try:
-        max_devices = int(max_devices) if max_devices else 0
+        max_devices = int(max_devices) if max_devices else 1  # Changed from 0 to 1
+        # Ensure at least 1 device
+        if max_devices < 1:
+            max_devices = 1
     except:
-        max_devices = 0
+        max_devices = 1  # Changed from 0 to 1
 
     if duration > 0:
         expires = (datetime.now() + timedelta(days=duration)).strftime(
@@ -383,9 +386,10 @@ def handle_generate_keys():
                 "key": k,
                 "status": "unused",
                 "hwid": None,
+                "hwids": [],  # Initialize empty list for multiple devices
                 "expires": expires,
-                "max_devices": max_devices if max_devices > 0 else 0,
-                "device_count": 0,
+                "max_devices": max_devices,  # Will now be at least 1
+                "device_count": 0,  # Start at 0, will become 1 on first use
                 "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "last_used": None,
             }

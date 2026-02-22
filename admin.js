@@ -196,7 +196,7 @@ generateBtn.addEventListener("click", async () => {
       duration: document.getElementById("keyDuration").value,
       qty: document.getElementById("keyQty").value || 1,
       custom_name: customNameValue,
-      max_devices: document.getElementById("keyMaxDevices").value || 0,
+      max_devices: document.getElementById("keyMaxDevices").value || 1,
     });
     console.log("API Response:", data);
 
@@ -293,21 +293,21 @@ async function loadKeysList() {
     keysBody.innerHTML = data.keys
       .map(
         (k) => `
-      <tr class="key-row" data-key="${k.key}">
-        <td><input type="checkbox" class="key-checkbox" value="${k.key}" /></td>
-        <td style="font-family:var(--font-mono);color:var(--accent)">${k.key}</td>
-        <td><span class="badge ${k.status}">${k.status.toUpperCase()}</span></td>
-        <td>${k.expires || "Lifetime"}</td>
-        <td>${k.device_count || 0}/${k.max_devices || "Unlimited"}</td>
-        <td title="${k.hwid || ""}">${k.hwid ? k.hwid.slice(0, 12) + "…" : "—"}</td>
-        <td>
-          <button class="action-btn copy-key" onclick="copyText('${k.key}',this)">COPY</button>
-          <button class="action-btn" onclick="deleteKey('${k.key}')">DELETE</button>
-          ${k.device_count && k.device_count > 0 ? `<button class="action-btn" onclick="resetDeviceCount('${k.key}')">RESET DEVICES</button>` : ""}
-          ${k.hwid ? `<button class="action-btn" onclick="resetHWID('${k.key}')">RESET</button>` : ""}
-        </td>
-      </tr>
-    `,
+  <tr class="key-row" data-key="${k.key}">
+    <td><input type="checkbox" class="key-checkbox" value="${k.key}" /></td>
+    <td style="font-family:var(--font-mono);color:var(--accent)">${k.key}</td>
+    <td><span class="badge ${k.status}">${k.status.toUpperCase()}</span></td>
+    <td>${k.expires || "Lifetime"}</td>
+    <td>${k.device_count || 0}/${k.max_devices}</td>
+    <td>
+      <button class="action-btn copy-key" onclick="copyText('${k.key}',this)">COPY</button>
+      <button class="action-btn" onclick="deleteKey('${k.key}')">DELETE</button>
+      <button class="action-btn" onclick="resetDeviceCount('${k.key}')">
+        ${k.device_count && k.device_count > 0 ? `RESET (${k.device_count})` : "RESET"}
+      </button>
+    </td>
+  </tr>
+`,
       )
       .join("");
 
@@ -394,16 +394,30 @@ async function resetHWID(key) {
   await apiFetch("reset_hwid", { key });
   loadKeysList();
 }
-
 async function resetDeviceCount(key) {
+  // First get the current device count from the row data
+  const keyRow = document.querySelector(`.key-row[data-key="${key}"]`);
+  let currentDeviceCount = 0;
+
+  if (keyRow) {
+    const devicesCell = keyRow.querySelector("td:nth-child(5)");
+    if (devicesCell) {
+      const deviceText = devicesCell.textContent;
+      const match = deviceText.match(/(\d+)\//);
+      if (match) {
+        currentDeviceCount = parseInt(match[1]);
+      }
+    }
+  }
+
   const confirmed = await showConfirmDialog(
-    `Reset device count and HWID for: ${key}?\n\nThis will clear all device registrations (${deviceCount} devices) and the key can be used on new devices.`,
+    `Reset device count and HWID for: ${key}?\n\nThis will clear all device registrations (${currentDeviceCount} devices) and the key can be used on new devices.`,
     "Confirm Device Reset",
   );
   if (!confirmed) return;
 
   try {
-    // FIX: Use the reset_device_count endpoint which should clear both
+    // Use the reset_device_count endpoint which clears both
     const data = await apiFetch("reset_device_count", { key });
     if (data.success) {
       showResult(

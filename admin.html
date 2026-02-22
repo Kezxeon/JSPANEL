@@ -22,19 +22,13 @@
           <span class="brand">AZZXION ADMIN</span>
         </div>
         <div class="nav-menu">
-          <button class="nav-item active" data-page="dashboard">
-            ⬡ KEYS
-          </button>
-          <button class="nav-item" data-page="libraries">
-            ⬡ LIBRARIES
-          </button>
+          <button class="nav-item active" data-page="dashboard">⬡ KEYS</button>
+          <button class="nav-item" data-page="libraries">⬡ LIBRARIES</button>
           <div class="nav-spacer"></div>
           <span class="status-bar">
             <span class="dot pulse"></span> PANEL ACTIVE
           </span>
-          <button class="ghost-btn logout-btn" id="logoutBtn">
-            LOGOUT
-          </button>
+          <button class="ghost-btn logout-btn" id="logoutBtn">LOGOUT</button>
         </div>
       </nav>
 
@@ -71,7 +65,13 @@
                 <div class="field-label" style="margin-top: 14px">QUANTITY</div>
                 <div class="input-wrap">
                   <span class="input-icon">⬡</span>
-                  <input type="number" id="keyQty" value="1" min="1" max="100" />
+                  <input
+                    type="number"
+                    id="keyQty"
+                    value="1"
+                    min="1"
+                    max="100"
+                  />
                 </div>
 
                 <div class="field-label" style="margin-top: 14px">
@@ -207,7 +207,6 @@
                     <th>STATUS</th>
                     <th>EXPIRES</th>
                     <th>DEVICES</th>
-                    <th>HWID</th>
                     <th>ACTIONS</th>
                   </tr>
                 </thead>
@@ -257,7 +256,9 @@
                 />
               </div>
 
-              <div class="field-label" style="margin-top: 14px">LIBRARY NAME</div>
+              <div class="field-label" style="margin-top: 14px">
+                LIBRARY NAME
+              </div>
               <div class="input-wrap">
                 <span class="input-icon">⬡</span>
                 <input
