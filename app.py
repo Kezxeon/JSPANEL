@@ -25,7 +25,9 @@ mongo_uri = os.getenv("MONGO_URI")
 if mongo_uri:
     client = MongoClient(mongo_uri)
 else:
-    client = MongoClient("mongodb+srv://azxpanel:azxpanelpasswrd@render.4qwq74m.mongodb.net/?appName=Render")
+    client = MongoClient(
+        "mongodb+srv://azxpanel:azxpanelpasswrd@render.4qwq74m.mongodb.net/?appName=Render"
+    )
 
 db = client["azxpanel"]
 keys_collection = db["keys"]
@@ -55,6 +57,7 @@ os.makedirs(LIBRARIES_DIR, exist_ok=True)
 
 # ========== MongoDB Functions ==========
 
+
 def load_keys():
     """Load all keys from MongoDB"""
     try:
@@ -76,11 +79,7 @@ def save_keys(keys):
         for key, data in keys.items():
             data_copy = data.copy()
             data_copy["key"] = key
-            keys_collection.update_one(
-                {"key": key},
-                {"$set": data_copy},
-                upsert=True
-            )
+            keys_collection.update_one({"key": key}, {"$set": data_copy}, upsert=True)
     except Exception as e:
         print(f"Error saving keys: {e}")
 
@@ -115,9 +114,7 @@ def save_libraries(libs):
             data_copy = data.copy()
             data_copy["filename"] = filename
             libraries_collection.update_one(
-                {"filename": filename},
-                {"$set": data_copy},
-                upsert=True
+                {"filename": filename}, {"$set": data_copy}, upsert=True
             )
     except Exception as e:
         print(f"Error saving libraries: {e}")
@@ -154,9 +151,7 @@ def save_sessions(sessions):
             data_copy = data.copy()
             data_copy["token"] = token
             sessions_collection.update_one(
-                {"token": token},
-                {"$set": data_copy},
-                upsert=True
+                {"token": token}, {"$set": data_copy}, upsert=True
             )
     except Exception as e:
         print(f"Error saving sessions: {e}")
@@ -165,11 +160,9 @@ def save_sessions(sessions):
 def create_session(token, exp_time):
     """Create a new session in MongoDB"""
     try:
-        sessions_collection.insert_one({
-            "token": token,
-            "exp": exp_time,
-            "created": datetime.now()
-        })
+        sessions_collection.insert_one(
+            {"token": token, "exp": exp_time, "created": datetime.now()}
+        )
     except Exception as e:
         print(f"Error creating session: {e}")
 
@@ -184,10 +177,15 @@ def delete_session(token):
 
 # ========== Original Functions ==========
 
+
 def make_key(custom_name=""):
     if custom_name:
         return custom_name
-    return f"Azxion-{secrets.token_hex(5)}"
+
+    characters = string.ascii_uppercase + string.digits  # A-Z + 0-9
+    random_part = "".join(secrets.choice(characters) for _ in range(10))
+
+    return f"Azxion-{random_part}"
 
 
 def require_admin(f):
@@ -198,14 +196,16 @@ def require_admin(f):
             return jsonify({"success": False, "message": "Unauthorized"})
 
         try:
-            session = sessions_collection.find_one({
-                "token": token,
-                "exp": {"$gt": time.time()}
-            })
-            
+            session = sessions_collection.find_one(
+                {"token": token, "exp": {"$gt": time.time()}}
+            )
+
             if not session:
                 return jsonify(
-                    {"success": False, "message": "Session expired. Please log in again."}
+                    {
+                        "success": False,
+                        "message": "Session expired. Please log in again.",
+                    }
                 )
         except Exception as e:
             print(f"Error checking session: {e}")
@@ -218,9 +218,9 @@ def require_admin(f):
 
 def hmac_sha256(data, key):
     if isinstance(key, str):
-        key = key.encode('utf-8')
+        key = key.encode("utf-8")
     if isinstance(data, str):
-        data = data.encode('utf-8')
+        data = data.encode("utf-8")
     return hmac.new(key, data, hashlib.sha256).hexdigest()
 
 
@@ -267,6 +267,7 @@ def send_enc_err(reason, key):
 
 
 # ========== API Routes ==========
+
 
 @app.route("/api.php", methods=["POST", "GET", "OPTIONS"])
 def api_handler():
@@ -382,20 +383,20 @@ def handle_list_keys():
         query = {}
         if filter_status:
             query["status"] = filter_status
-        
+
         all_docs = list(keys_collection.find(query).sort("created", -1).limit(200))
         rows = []
-        
+
         for doc in all_docs:
             if search:
                 key = doc.get("key", "")
                 note = doc.get("note", "")
                 if search not in key.lower() and search not in str(note).lower():
                     continue
-            
+
             doc.pop("_id", None)
             rows.append(doc)
-        
+
         return jsonify({"success": True, "keys": rows})
     except Exception as e:
         print(f"Error listing keys: {e}")
@@ -424,21 +425,23 @@ def handle_get_stats():
         )
     except Exception as e:
         print(f"Error getting stats: {e}")
-        return jsonify({
-            "success": True,
-            "total": 0,
-            "active": 0,
-            "used": 0,
-            "expired": 0,
-            "unused": 0,
-            "banned": 0
-        })
+        return jsonify(
+            {
+                "success": True,
+                "total": 0,
+                "active": 0,
+                "used": 0,
+                "expired": 0,
+                "unused": 0,
+                "banned": 0,
+            }
+        )
 
 
 @require_admin
 def handle_delete_key():
     key = request.form.get("key", "")
-    
+
     try:
         delete_key_db(key)
         return jsonify({"success": True})
@@ -450,16 +453,10 @@ def handle_delete_key():
 @require_admin
 def handle_reset_hwid():
     key = request.form.get("key", "")
-    
+
     try:
         keys_collection.update_one(
-            {"key": key},
-            {
-                "$set": {
-                    "hwid": None,
-                    "status": "unused"
-                }
-            }
+            {"key": key}, {"$set": {"hwid": None, "status": "unused"}}
         )
         return jsonify({"success": True})
     except Exception as e:
@@ -505,13 +502,11 @@ def handle_upload_library():
             "size": file_size,
             "version": lib_version if lib_version else None,
             "description": lib_description if lib_description else None,
-            "uploaded": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "uploaded": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
-        
+
         libraries_collection.update_one(
-            {"filename": filename},
-            {"$set": lib_data},
-            upsert=True
+            {"filename": filename}, {"$set": lib_data}, upsert=True
         )
 
         return jsonify({"success": True, "message": "Library uploaded successfully."})
@@ -525,17 +520,17 @@ def handle_upload_library():
 @require_admin
 def handle_list_libraries():
     search = request.form.get("search", "").lower()
-    
+
     try:
         query = {}
         if search:
             query["filename"] = {"$regex": search, "$options": "i"}
-        
+
         rows = list(libraries_collection.find(query).sort("uploaded", -1).limit(200))
-        
+
         for row in rows:
             row.pop("_id", None)
-        
+
         return jsonify({"success": True, "libraries": rows})
     except Exception as e:
         print(f"Error listing libraries: {e}")
@@ -555,7 +550,9 @@ def handle_delete_library():
         return jsonify({"success": True})
     except Exception as e:
         print(f"Error deleting library: {e}")
-        return jsonify({"success": False, "message": f"Failed to delete library: {str(e)}"})
+        return jsonify(
+            {"success": False, "message": f"Failed to delete library: {str(e)}"}
+        )
 
 
 @require_admin
@@ -580,7 +577,7 @@ def handle_login():
 
     try:
         key_doc = keys_collection.find_one({"key": user_key})
-        
+
         if not key_doc:
             return jsonify({"success": False, "message": "Invalid key."})
 
@@ -588,10 +585,12 @@ def handle_login():
             return jsonify({"success": False, "message": "Key is banned."})
 
         if key_doc.get("expires"):
-            if datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S").timestamp() < time.time():
+            if (
+                datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S").timestamp()
+                < time.time()
+            ):
                 keys_collection.update_one(
-                    {"key": user_key},
-                    {"$set": {"status": "expired"}}
+                    {"key": user_key}, {"$set": {"status": "expired"}}
                 )
                 return jsonify({"success": False, "message": "Key has expired."})
 
@@ -599,7 +598,12 @@ def handle_login():
             return jsonify({"success": False, "message": "Key has expired."})
 
         return jsonify(
-            {"success": True, "expiry": key_doc.get("expires") if key_doc.get("expires") else "Lifetime"}
+            {
+                "success": True,
+                "expiry": (
+                    key_doc.get("expires") if key_doc.get("expires") else "Lifetime"
+                ),
+            }
         )
     except Exception as e:
         print(f"Error during login: {e}")
@@ -644,11 +648,12 @@ def handle_connect():
             return send_enc_err("Key is banned", AES_KEY)
 
         if key_doc.get("expires"):
-            expiry_time = datetime.strptime(key_doc["expires"], "%Y-%m-%d %H:%M:%S").timestamp()
+            expiry_time = datetime.strptime(
+                key_doc["expires"], "%Y-%m-%d %H:%M:%S"
+            ).timestamp()
             if expiry_time < time.time():
                 keys_collection.update_one(
-                    {"key": user_key},
-                    {"$set": {"status": "expired"}}
+                    {"key": user_key}, {"$set": {"status": "expired"}}
                 )
                 return send_enc_err("Key has expired", AES_KEY)
 
@@ -657,18 +662,12 @@ def handle_connect():
 
         if not key_doc.get("hwid"):
             keys_collection.update_one(
-                {"key": user_key},
-                {
-                    "$set": {
-                        "hwid": serial,
-                        "status": "active"
-                    }
-                }
+                {"key": user_key}, {"$set": {"hwid": serial, "status": "active"}}
             )
 
         keys_collection.update_one(
             {"key": user_key},
-            {"$set": {"last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}
+            {"$set": {"last_used": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}},
         )
 
         checked_str = f"{GAME_ID}-{user_key}-{serial}-{auth}-{t}-{SECRET_SALT}"
@@ -681,7 +680,9 @@ def handle_connect():
             "data": {
                 "token": token,
                 "rng": int(time.time()),
-                "expiredDate": key_doc.get("expires") if key_doc.get("expires") else "Lifetime",
+                "expiredDate": (
+                    key_doc.get("expires") if key_doc.get("expires") else "Lifetime"
+                ),
                 "checked": checked,
             },
         }
@@ -694,23 +695,24 @@ def handle_connect():
 
 # ========== Static File Routes ==========
 
-@app.route('/')
+
+@app.route("/")
 def home():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory(".", "index.html")
 
 
-@app.route('/admin')
+@app.route("/admin")
 def dashboard():
-    return send_from_directory('.', 'admin.html')
+    return send_from_directory(".", "admin.html")
 
 
-@app.route('/<path:filename>')
+@app.route("/<path:filename>")
 def serve_files(filename):
-    return send_from_directory('.', filename)
+    return send_from_directory(".", filename)
 
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
     print(f"Server starting with MongoDB integration..")
-    print(f"Database: {db.name}")
-    print(f"Collections: {db.list_collection_names()}")
-    app.run(debug=False, host="0.0.0.0", port=5000)
+    print(f"Listening on port {port}")
+    app.run(debug=False, host="0.0.0.0", port=port)
